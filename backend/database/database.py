@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator
 
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
@@ -16,6 +15,7 @@ try:
     from .model import Base
 except ImportError:
     from model import Base
+
 
 DATABASE_URL = "sqlite+aiosqlite:///./requirement_space.db"
 
@@ -32,6 +32,7 @@ engine: AsyncEngine = create_async_engine(
     echo=False,
     future=True,
 )
+
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
@@ -51,8 +52,7 @@ async def drop_db() -> None:
         await conn.run_sync(Base.metadata.drop_all)
 
 
-@asynccontextmanager
-async def get_session() -> AsyncIterator[AsyncSession]:
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         try:
             yield session

@@ -4,7 +4,7 @@ from typing import Dict
 
 from backend.core.generators.prompts import scenarios_generate_prompt
 from backend.core.generators.base_generator import BaseGenerator, GenerateInput
-from backend.schema import FeatureNode, ActorNode
+from backend.schemas import FeatureNode, ActorNode
 
 # 为场景生成器定义专属的输入类型
 @dataclass
@@ -45,7 +45,7 @@ class ScenariosGenerator(BaseGenerator[ScenariosGeneratorInput]):
 
 if __name__ == "__main__":
     import asyncio
-    from backend.schema import FeatureNode, ActorNode
+    from backend.schemas import FeatureNode, ActorNode
     scenarios_generator = ScenariosGenerator()
 
     user_requirements = "极简纯净本地音乐播放器，不联网、无会员、无广告，只读取电脑本地音乐文件，支持无损格式 Flac/WAV/MP3 播放，自带歌词本地匹配、音效均衡器、歌单自定义、睡眠定时关闭、全局快捷键切歌，界面清爽轻量化，替代臃肿的主流音乐播放器。"

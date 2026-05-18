@@ -4,7 +4,7 @@ from typing import Dict, List
 
 from backend.core.perceptrons.prompts import flows_perceive_prompt
 from backend.core.perceptrons.base_perceptron import BasePerceptron, PerceptronInput
-from backend.schema import ActorNode, FeatureNode, FlowNode
+from backend.schemas import ActorNode, FeatureNode, FlowNode
 
 
 # 为流程感知器定义专属的输入类型

@@ -4,7 +4,7 @@ from typing import Dict, List
 
 from backend.core.perceptrons.prompts import features_perceive_prompt
 from backend.core.perceptrons.base_perceptron import BasePerceptron, PerceptronInput
-from backend.schema import ActorNode, FeatureNode
+from backend.schemas import ActorNode, FeatureNode
 
 
 # 为系统功能感知器定义专属的输入类型

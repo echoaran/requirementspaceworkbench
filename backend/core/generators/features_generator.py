@@ -4,7 +4,7 @@ from typing import Dict, List
 
 from backend.core.generators.prompts import features_generate_prompt
 from backend.core.generators.base_generator import BaseGenerator, GenerateInput
-from backend.schema import ActorNode
+from backend.schemas import ActorNode
 
 # 为特征树生成器定义专属的输入类型
 @dataclass
@@ -38,7 +38,7 @@ class FeaturesGenerator(BaseGenerator[FeaturesGeneratorInput]):
 
 if __name__ == "__main__":
     import asyncio
-    from backend.schema import ActorNode
+    from backend.schemas import ActorNode
 
     features_generator = FeaturesGenerator()
 

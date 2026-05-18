@@ -49,3 +49,6 @@ htmlcov/
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
+
+# 数据库文件
+requirement_space.db

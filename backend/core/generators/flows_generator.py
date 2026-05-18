@@ -4,7 +4,7 @@ from typing import Dict,List
 
 from backend.core.generators.prompts import flows_generate_prompt
 from backend.core.generators.base_generator import BaseGenerator, GenerateInput
-from backend.schema import FeatureNode, ActorNode
+from backend.schemas import FeatureNode, ActorNode
 
 # 为流程生成器定义专属的输入类型
 @dataclass
@@ -52,7 +52,7 @@ class FlowsGenerator(BaseGenerator[FlowsGeneratorInput]):
 
 if __name__ == "__main__":
     import asyncio
-    from backend.schema import FeatureNode, ActorNode
+    from backend.schemas import FeatureNode, ActorNode
     flows_generator = FlowsGenerator()
 
     user_requirements = "极简纯净本地音乐播放器，不联网、无会员、无广告，只读取电脑本地音乐文件，支持无损格式 Flac/WAV/MP3 播放，自带歌词本地匹配、音效均衡器、歌单自定义、睡眠定时关闭、全局快捷键切歌，界面清爽轻量化，替代臃肿的主流音乐播放器。"
