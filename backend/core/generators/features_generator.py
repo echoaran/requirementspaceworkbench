@@ -63,187 +63,138 @@ if __name__ == "__main__":
     {
       "feature_number": "F001",
       "feature_name": "极简纯净本地音乐播放器",
-      "feature_description": "一款不联网、无会员、无广告的轻量化本地音乐播放器，仅支持读取电脑本地音乐文件，提供无损音频播放、歌词匹配、音效调节、歌单管理、睡眠定时和全局快捷键切歌等核心能力，旨在替代臃肿的主流音乐播放器",
+      "feature_description": "一款面向个人用户的轻量化本地音乐播放器，仅读取电脑本地音乐文件，支持无损与常见音频格式播放，提供歌词匹配、音效调节、歌单管理、定时关闭和全局快捷键等功能，强调无联网、无会员、无广告的纯净使用体验",
       "actor_ids": [
         1
-      ],
-      "sub_feature_number": [
-        "F001-001",
-        "F001-002",
-        "F001-003",
-        "F001-004",
-        "F001-005"
       ]
     },
     {
       "feature_number": "F001-001",
-      "feature_name": "本地音乐库管理",
-      "feature_description": "实现对电脑本地音乐文件的导入、识别、整理与基础浏览能力，作为播放器的内容来源管理中心",
+      "feature_name": "本地音乐播放管理",
+      "feature_description": "实现本地音乐文件的读取、识别、播放与基础播放控制",
       "actor_ids": [
         1
-      ],
-      "sub_feature_number": [
-        "F001-001-001",
-        "F001-001-002",
-        "F001-001-003"
       ]
     },
     {
       "feature_number": "F001-001-001",
-      "feature_name": "本地文件读取",
-      "feature_description": "仅扫描和读取电脑本地存储中的音乐文件，不进行联网获取或云端同步",
+      "feature_name": "本地音乐文件读取",
+      "feature_description": "仅从电脑本地导入和读取音乐文件，不连接网络获取内容",
       "actor_ids": [
         1
-      ],
-      "sub_feature_number": []
+      ]
     },
     {
       "feature_number": "F001-001-002",
-      "feature_name": "音频格式识别",
-      "feature_description": "支持识别并管理 Flac、WAV、MP3 等本地音频文件格式",
+      "feature_name": "音频格式播放",
+      "feature_description": "支持 Flac、WAV、MP3 等本地音频文件的播放",
       "actor_ids": [
         1
-      ],
-      "sub_feature_number": []
+      ]
     },
     {
       "feature_number": "F001-001-003",
-      "feature_name": "音乐库浏览",
-      "feature_description": "支持按本地音乐列表进行浏览、查看与选择播放",
+      "feature_name": "基础播放控制",
+      "feature_description": "支持播放、暂停、上一首、下一首等基础播放操作",
       "actor_ids": [
         1
-      ],
-      "sub_feature_number": []
+      ]
     },
     {
       "feature_number": "F001-002",
-      "feature_name": "音乐播放控制",
-      "feature_description": "提供基础且流畅的本地音乐播放与切换控制能力",
+      "feature_name": "歌词与音效设置",
+      "feature_description": "提供本地歌词匹配与播放音效调节功能",
       "actor_ids": [
         1
-      ],
-      "sub_feature_number": [
-        "F001-002-001",
-        "F001-002-002",
-        "F001-002-003"
       ]
     },
     {
       "feature_number": "F001-002-001",
-      "feature_name": "播放与暂停控制",
-      "feature_description": "支持对本地音乐进行播放、暂停、继续等基础控制",
+      "feature_name": "本地歌词匹配",
+      "feature_description": "自动或手动匹配并显示本地歌词文件",
       "actor_ids": [
         1
-      ],
-      "sub_feature_number": []
+      ]
     },
     {
       "feature_number": "F001-002-002",
-      "feature_name": "上一首下一首切换",
-      "feature_description": "支持在当前播放列表或音乐库中切换上一首、下一首曲目",
+      "feature_name": "音效均衡器",
+      "feature_description": "提供均衡器调节能力，用于调整播放音效表现",
       "actor_ids": [
         1
-      ],
-      "sub_feature_number": []
-    },
-    {
-      "feature_number": "F001-002-003",
-      "feature_name": "播放进度与音量控制",
-      "feature_description": "支持调节播放进度和基础音量，以满足日常播放操作需求",
-      "actor_ids": [
-        1
-      ],
-      "sub_feature_number": []
+      ]
     },
     {
       "feature_number": "F001-003",
-      "feature_name": "歌词与音效设置",
-      "feature_description": "提供本地歌词匹配与播放音效调节能力，增强本地听歌体验",
+      "feature_name": "歌单与播放控制",
+      "feature_description": "支持用户自定义歌单管理及便捷播放控制设置",
       "actor_ids": [
         1
-      ],
-      "sub_feature_number": [
-        "F001-003-001",
-        "F001-003-002"
       ]
     },
     {
       "feature_number": "F001-003-001",
-      "feature_name": "本地歌词匹配",
-      "feature_description": "支持自动匹配并显示本地歌词内容，便于同步查看歌曲歌词",
+      "feature_name": "歌单自定义",
+      "feature_description": "支持创建、编辑、删除和整理用户自定义歌单",
       "actor_ids": [
         1
-      ],
-      "sub_feature_number": []
+      ]
     },
     {
       "feature_number": "F001-003-002",
-      "feature_name": "音效均衡器调节",
-      "feature_description": "支持调整均衡器等音效参数，以自定义音乐播放效果",
+      "feature_name": "播放顺序管理",
+      "feature_description": "支持按歌单或单曲进行顺序、随机等播放方式管理",
       "actor_ids": [
         1
-      ],
-      "sub_feature_number": []
+      ]
     },
     {
       "feature_number": "F001-004",
-      "feature_name": "歌单与播放计划管理",
-      "feature_description": "支持用户根据个人偏好自定义歌单，并设置定时停止播放等播放计划",
+      "feature_name": "定时与快捷操作",
+      "feature_description": "提供睡眠定时关闭和全局快捷键等便捷操作能力",
       "actor_ids": [
         1
-      ],
-      "sub_feature_number": [
-        "F001-004-001",
-        "F001-004-002"
       ]
     },
     {
       "feature_number": "F001-004-001",
-      "feature_name": "歌单自定义",
-      "feature_description": "支持创建、编辑、删除自定义歌单，并将本地歌曲加入对应歌单",
+      "feature_name": "睡眠定时关闭",
+      "feature_description": "支持设置定时关闭播放器或停止播放，适合睡前使用",
       "actor_ids": [
         1
-      ],
-      "sub_feature_number": []
+      ]
     },
     {
       "feature_number": "F001-004-002",
-      "feature_name": "睡眠定时关闭",
-      "feature_description": "支持设置定时关闭播放器或停止播放，适合睡前自动结束播放",
+      "feature_name": "全局快捷键切歌",
+      "feature_description": "支持在系统任意界面通过全局快捷键切换上一首、下一首等播放操作",
       "actor_ids": [
         1
-      ],
-      "sub_feature_number": []
+      ]
     },
     {
       "feature_number": "F001-005",
-      "feature_name": "快捷操作与界面设置",
-      "feature_description": "提供全局快捷键操作和清爽轻量化界面，以提升使用便捷性和界面纯净度",
+      "feature_name": "界面与纯净体验",
+      "feature_description": "提供清爽轻量化的界面设计和纯净无干扰的使用环境",
       "actor_ids": [
         1
-      ],
-      "sub_feature_number": [
-        "F001-005-001",
-        "F001-005-002"
       ]
     },
     {
       "feature_number": "F001-005-001",
-      "feature_name": "全局快捷键切歌",
-      "feature_description": "支持在系统任意界面通过全局快捷键进行切歌等播放控制",
+      "feature_name": "轻量化清爽界面",
+      "feature_description": "采用简洁直观的界面布局，降低视觉负担并减少系统资源占用",
       "actor_ids": [
         1
-      ],
-      "sub_feature_number": []
+      ]
     },
     {
       "feature_number": "F001-005-002",
-      "feature_name": "清爽轻量化界面",
-      "feature_description": "提供简洁、纯净、轻量化的界面展示方式，避免冗余功能干扰",
+      "feature_name": "无联网无广告无会员",
+      "feature_description": "软件不提供联网内容、会员服务或广告干扰，保持纯净本地播放体验",
       "actor_ids": [
         1
-      ],
-      "sub_feature_number": []
+      ]
     }
   ]
 }

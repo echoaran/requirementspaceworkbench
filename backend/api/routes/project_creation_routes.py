@@ -7,11 +7,19 @@ from backend.api.schemas.project_creation_schema import (
     ProjectCreationDraftDiscardResponse,
     ProjectCreationDraftResponse,
 )
-from backend.core.services.project_creation_service import (
+from backend.api.services.project_creation_service import (
     ProjectCreationService,
 )
 from backend.database.database import get_session
 
+
+FEATURE_GENERATION_ERRORS = {
+    "empty_features",
+    "duplicate_feature_number",
+    "invalid_feature_number_format",
+    "missing_parent_feature",
+    "invalid_root_feature_count",
+}
 
 router = APIRouter(
     prefix="/api/project_creation_drafts",
@@ -19,7 +27,6 @@ router = APIRouter(
 )
 
 project_creation_service = ProjectCreationService()
-
 
 @router.post(
     "",
@@ -33,12 +40,11 @@ async def create_project_creation_draft(
             user_requirements=request.user_requirements,
         )
     except ValueError as error:
-        if str(error) == "empty_features":
+        if str(error) in FEATURE_GENERATION_ERRORS:
             raise HTTPException(
                 status_code=502,
-                detail="empty_features",
+                detail=str(error),
             )
-
         raise
 
 
@@ -60,10 +66,10 @@ async def regenerate_project_creation_draft(
                 detail="draft_not_found",
             )
 
-        if str(error) == "empty_features":
+        if str(error) in FEATURE_GENERATION_ERRORS:
             raise HTTPException(
                 status_code=502,
-                detail="empty_features",
+                detail=str(error),
             )
 
         raise

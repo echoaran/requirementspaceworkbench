@@ -1,4 +1,5 @@
 from uuid import uuid4
+import re
 from sqlalchemy import insert
 
 from backend.core.generators.actors_generator import (
@@ -18,33 +19,95 @@ class ProjectCreationService:
         self._actors_generator = ActorsGenerator()
         self._features_generator = FeaturesGenerator()
 
-    async def create_draft(
+    _feature_number_pattern = re.compile(
+        r"^F\d{3}(?:-\d{3})*$"
+    )
+
+    @staticmethod
+    def _get_parent_feature_number(
+            feature_number: str,
+    ) -> str | None:
+        if "-" not in feature_number:
+            return None
+
+        return feature_number.rsplit("-", 1)[0]
+
+    @staticmethod
+    def _get_feature_position(
+            feature_number: str,
+    ) -> int:
+        return int(feature_number.rsplit("-", 1)[-1].replace("F", ""))
+
+    def _validate_feature_tree_by_number(
         self,
-        user_requirements: str,
+        features: list[dict],
+    ) -> None:
+        if len(features) == 0:
+            raise ValueError("empty_features")
+
+        feature_numbers = [
+            feature["feature_number"]
+            for feature in features
+        ]
+
+        feature_number_set = set(feature_numbers)
+
+        if len(feature_number_set) != len(feature_numbers):
+            raise ValueError("duplicate_feature_number")
+
+        root_numbers = []
+
+        for feature_number in feature_numbers:
+            if self._feature_number_pattern.match(feature_number) is None:
+                raise ValueError("invalid_feature_number_format")
+
+            parent_number = self._get_parent_feature_number(
+                feature_number
+            )
+
+            if parent_number is None:
+                root_numbers.append(feature_number)
+                continue
+
+            if parent_number not in feature_number_set:
+                raise ValueError("missing_parent_feature")
+
+        if len(root_numbers) != 1:
+            raise ValueError("invalid_root_feature_count")
+
+    async def create_draft(
+            self,
+            user_requirements: str,
     ) -> dict:
         draft_id = uuid4().hex
 
-        payload = await self._generate_preview(
+        draft_payload, response_payload = await self._generate_preview(
             user_requirements=user_requirements,
         )
 
-        payload["draft_id"] = draft_id
-        self._drafts[draft_id] = payload
-        return payload
+        draft_payload["draft_id"] = draft_id
+        response_payload["draft_id"] = draft_id
+
+        self._drafts[draft_id] = draft_payload
+
+        return response_payload
 
     async def regenerate_draft(
-        self,
-        draft_id: str,
+            self,
+            draft_id: str,
     ) -> dict:
         draft = self._get_draft(draft_id)
 
-        payload = await self._generate_preview(
+        draft_payload, response_payload = await self._generate_preview(
             user_requirements=draft["user_requirements"],
         )
 
-        payload["draft_id"] = draft_id
-        self._drafts[draft_id] = payload
-        return payload
+        draft_payload["draft_id"] = draft_id
+        response_payload["draft_id"] = draft_id
+
+        self._drafts[draft_id] = draft_payload
+
+        return response_payload
 
     async def confirm_draft(
         self,
@@ -79,25 +142,25 @@ class ProjectCreationService:
         }
 
     async def _generate_preview(
-        self,
-        user_requirements: str,
-    ) -> dict:
+            self,
+            user_requirements: str,
+    ) -> tuple[dict, dict]:
         actors_raw = await self._actors_generator.generate(
             ActorsGeneratorInput(
                 user_requirements=user_requirements,
             )
         )
 
-        actor_previews = []
+        actor_previews_for_draft = []
         actor_nodes = []
 
         for index, raw_actor in enumerate(
-            actors_raw["actors"],
-            start=1,
+                actors_raw["actors"],
+                start=1,
         ):
             actor_number = f"A{index:03d}"
 
-            actor_previews.append(
+            actor_previews_for_draft.append(
                 {
                     "actor_number": actor_number,
                     "actor_name": raw_actor["actor_name"],
@@ -123,71 +186,98 @@ class ProjectCreationService:
         id_to_actor_number = {
             index: actor["actor_number"]
             for index, actor in enumerate(
-                actor_previews,
+                actor_previews_for_draft,
                 start=1,
             )
         }
 
-        feature_previews = []
+        raw_features = features_raw["features"]
 
-        for raw_feature in features_raw["features"]:
-            feature_previews.append(
+        self._validate_feature_tree_by_number(raw_features)
+
+        feature_previews_for_draft = []
+
+        for raw_feature in raw_features:
+            feature_number = raw_feature["feature_number"]
+
+            feature_previews_for_draft.append(
                 {
-                    "feature_number": raw_feature["feature_number"],
+                    "feature_number": feature_number,
                     "feature_name": raw_feature["feature_name"],
                     "feature_description": raw_feature["feature_description"],
                     "actor_numbers": [
                         id_to_actor_number[actor_id]
                         for actor_id in raw_feature.get("actor_ids", [])
                     ],
-                    "sub_feature_number": raw_feature.get(
-                        "sub_feature_number",
-                        [],
-                    ),
                 }
             )
 
-        root_feature = self._find_root_feature(feature_previews)
+        root_feature = self._find_root_feature(
+            feature_previews_for_draft
+        )
 
-        return {
+        actor_number_to_name = {
+            actor["actor_number"]: actor["actor_name"]
+            for actor in actor_previews_for_draft
+        }
+
+        actor_previews_for_response = [
+            {
+                "actor_name": actor["actor_name"],
+                "actor_description": actor["actor_description"],
+            }
+            for actor in actor_previews_for_draft
+        ]
+
+        feature_previews_for_response = [
+            {
+                "feature_name": feature["feature_name"],
+                "feature_description": feature["feature_description"],
+                "actor_names": [
+                    actor_number_to_name[actor_number]
+                    for actor_number in feature.get("actor_numbers", [])
+                ],
+            }
+            for feature in feature_previews_for_draft
+        ]
+
+        draft_payload = {
             "user_requirements": user_requirements,
             "project_preview": {
                 "project_name": root_feature["feature_name"],
                 "project_description": root_feature["feature_description"],
             },
-            "actors": actor_previews,
-            "features": feature_previews,
+            "actors": actor_previews_for_draft,
+            "features": feature_previews_for_draft,
         }
+
+        response_payload = {
+            "user_requirements": user_requirements,
+            "project_preview": {
+                "project_name": root_feature["feature_name"],
+                "project_description": root_feature["feature_description"],
+            },
+            "actors": actor_previews_for_response,
+            "features": feature_previews_for_response,
+        }
+
+        return draft_payload, response_payload
 
     def _find_root_feature(
         self,
         features: list[dict],
     ) -> dict:
-        if len(features) == 0:
-            raise ValueError("empty_features")
-
-        feature_numbers = {
-            feature["feature_number"]
-            for feature in features
-        }
-
-        child_numbers = set()
+        self._validate_feature_tree_by_number(features)
 
         for feature in features:
-            child_numbers.update(
-                feature.get("sub_feature_number", [])
+            parent_number = self._get_parent_feature_number(
+                feature["feature_number"]
             )
 
-        root_numbers = feature_numbers - child_numbers
+            if parent_number is None:
+                return feature
 
-        if len(root_numbers) == 1:
-            root_number = next(iter(root_numbers))
-
-            for feature in features:
-                if feature["feature_number"] == root_number:
-                    return feature
-
-        return features[0]
+        raise ValueError("invalid_root_feature_count")
 
     def _get_draft(
         self,
@@ -275,24 +365,26 @@ class ProjectCreationService:
                 feature_actor_rows,
             )
 
-        for parent_feature in draft["features"]:
-            parent_model = feature_number_to_model[
-                parent_feature["feature_number"]
-            ]
+        for feature in draft["features"]:
+            feature_number = feature["feature_number"]
 
-            for position, child_number in enumerate(
-                parent_feature.get("sub_feature_number", []),
-                start=1,
-            ):
-                child_model = feature_number_to_model[child_number]
+            parent_number = self._get_parent_feature_number(
+                feature_number
+            )
 
-                relation = FeatureRelationModel(
-                    parent_feature_id=parent_model.id,
-                    child_feature_id=child_model.id,
-                    position=position,
-                )
+            if parent_number is None:
+                continue
 
-                session.add(relation)
+            parent_model = feature_number_to_model[parent_number]
+            child_model = feature_number_to_model[feature_number]
+
+            relation = FeatureRelationModel(
+                parent_feature_id=parent_model.id,
+                child_feature_id=child_model.id,
+                position=self._get_feature_position(feature_number),
+            )
+
+            session.add(relation)
 
         await session.flush()
 

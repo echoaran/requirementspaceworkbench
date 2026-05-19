@@ -61,7 +61,7 @@ if __name__ == "__main__":
         featureName="本地文件读取",
         featureDescription="仅从电脑本地读取音乐文件，不依赖网络资源或在线音乐服务",
         actorIds=[1],
-        childIds=[],  # 无子功能，为叶子节点
+        childrenIds=[],  # 无子功能，为叶子节点
     )
 
     async def main():

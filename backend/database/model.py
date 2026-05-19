@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 from sqlalchemy import (
     DateTime,
@@ -9,12 +8,10 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    JSON,
     String,
     Table,
     Text,
     UniqueConstraint,
-    func,
     LargeBinary,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -23,17 +20,23 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 class Base(DeclarativeBase):
     pass
 
+from zoneinfo import ZoneInfo
+BEIJING_TZ = ZoneInfo("Asia/Shanghai")
+
+def beijing_now() -> datetime:
+    return datetime.now(BEIJING_TZ)
 
 class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
+        default=beijing_now,
         nullable=False,
     )
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
+        default=beijing_now,
+        onupdate=beijing_now,
         nullable=False,
     )
 
@@ -435,7 +438,7 @@ class BusinessObjectAttributeModel(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     data_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    example: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    example: Mapped[str] = mapped_column(Text, default="", nullable=False)
 
     business_object: Mapped[BusinessObjectModel] = relationship(back_populates="attributes")
 

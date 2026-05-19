@@ -74,8 +74,8 @@ class ScopeNode(BaseNode):
     negativeSummary: str
     reason: str
 
-    positivePicture: Optional[bytes] = None
-    negativePicture: Optional[bytes] = None
+    positivePictureBase64: Optional[str] = None
+    negativePictureBase64: Optional[str] = None
 
 # 功能结点
 @node_dataclass
@@ -87,11 +87,13 @@ class FeatureNode(BaseNode):
     featureDescription: str
 
     actorIds: List[int] = field(default_factory=list)  # 空数组=没有关联角色
+    parentId: Optional[int] = None
     childrenIds: List[int] = field(default_factory=list)      # 空数组表示无子结点，即该结点为叶子
 
     scenarios: List[ScenarioNode] = field(default_factory=list)      # 空数组表示没有场景
-    scope: Optional[ScopeNode] = None
     acceptanceCriteria: List[str] = field(default_factory=list)     # 空数组=没有验收条件
+
+    scope: Optional[ScopeNode] = None
 
 # 业务对象属性结点
 @node_dataclass

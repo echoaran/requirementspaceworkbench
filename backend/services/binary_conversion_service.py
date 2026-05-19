@@ -90,7 +90,6 @@ def base64_to_bytes(data: str, *, urlsafe: bool = False) -> bytes:
     return BinaryConversionService.base64_to_bytes(data, urlsafe=urlsafe)
 
 
-
 if __name__ == "__main__":
 
     raw = b"hello"

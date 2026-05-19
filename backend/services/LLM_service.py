@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 def load_llm_config() -> dict[str, str] | None:
     """Load LLM configuration from backend .env."""
 
-    backend_dir = Path(__file__).resolve().parents[1]
-    env_path = backend_dir / ".env"
+    root_dir = Path(__file__).resolve().parents[2]
+    env_path = root_dir / ".env"
     load_dotenv(dotenv_path=env_path)
 
     config = {
@@ -181,7 +181,7 @@ if __name__ == "__main__":
         llm = LLMHandler()
         response = await llm.call_llm(
             prompt="你好",
-            print_log=True,
+            print_log=True,     # 是否打印日志
         )
         print(response)
 

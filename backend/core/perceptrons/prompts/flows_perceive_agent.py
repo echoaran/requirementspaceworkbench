@@ -3,17 +3,17 @@ flows_perceive_prompt = """
 你是一个善于设计项目流程的软件设计师。
 
 # 任务
-1. 分析用户用自然语言描述的项目需求、目标系统参与者（用户）、目标系统能力（features tree）与当前整理出的系统流程。
+1. 分析用户用自然语言描述的项目需求、目标系统参与者（用户）、目标系统能力（features）与当前整理出的系统流程（包括输入输出的结构）。
 2. 判断是否需要补充系统流程（注意不是流程步骤，是流程）。若需要，则描述需要补充什么，为何需要补充，如何补充；若不需要，则输出不需要。
 3. 按照下方规定输出格式输出补充系统流程的原因。
 
 # 用户需求
-{{user_initial_requirements}}
+{{user_requirements}}
 
 # 参与者（用户）
 {{actors}}
 
-# 系统能力（features tree）
+# 系统能力（features）
 {{features}}
 
 # 当前整理出的流程
@@ -32,356 +32,436 @@ flows_perceive_prompt = """
 # 示例
 ## 示例输入
 ### 用户需求
-{轻量化桌面悬浮便签 + 待办整合软件，可新建多个独立便签贴在桌面任意位置，支持文字编辑、颜色分类、字体调整；自带待办清单功能，可设置任务截止时间、已完成标记、置顶重要事项，支持开机常驻、透明化背景、一键隐藏所有便签，适合学生、上班族记录临时灵感、日程、琐事。}
+轻量化桌面悬浮便签 + 待办整合软件，可新建多个独立便签贴在桌面任意位置，支持文字编辑、颜色分类、字体调整；自带待办清单功能，可设置任务截止时间、已完成标记、置顶重要事项，支持开机常驻、透明化背景、一键隐藏所有便签，适合学生、上班族记录临时灵感、日程、琐事。
 ### 参与者（用户）
 {
     "actors": [
         {
-            "actor_id": "A001",
+            "actor_id": 1,
             "actor_name": "普通用户",
             "actor_description": "使用本软件进行便签记录、待办任务管理的学生、上班族等个人使用者"
         }
     ]
 }
-### 系统能力（features tree）
+### 系统能力（features）
 {
     "features": [
         {
-            "feature_id": "F001",
-            "feature_name": "便签管理",
-            "feature_description": "对桌面悬浮便签进行创建、编辑、样式调整及删除等全生命周期管理",
-            "actor_ids": ["A001"],
-            "business_object_ids": ["B001"],
-            "priority": "P0",
-            "parent_id": ""
+            "feature_id": 1, 
+            "feature_name": "便签创建与布局",
+            "feature_description": "支持新建多个独立便签，并可将便签拖动放置在桌面任意位置",
+            "actor_ids": [1]
         },
         {
-            "feature_id": "F001-001",
-            "feature_name": "新建独立便签",
-            "feature_description": "支持创建多个相互独立的悬浮便签，可拖动至桌面任意位置摆放",
-            "actor_ids": ["A001"],
-            "business_object_ids": ["B001"],
-            "priority": "P0",
-            "parent_id": "F001"
-        },
-        {
-            "feature_id": "F001-002",
+            "feature_id": 2, 
             "feature_name": "便签文字编辑",
-            "feature_description": "支持对便签内容进行文字输入、修改、删除等基础编辑操作",
-            "actor_ids": ["A001"],
-            "business_object_ids": ["B001"],
-            "priority": "P0",
-            "parent_id": "F001"
+            "feature_description": "提供便签内文字的输入、修改、删除等基础编辑功能",
+            "actor_ids": [1]
         },
         {
-            "feature_id": "F001-003",
-            "feature_name": "便签颜色分类",
-            "feature_description": "支持为不同便签设置不同背景颜色，用于分类区分不同主题的内容",
-            "actor_ids": ["A001"],
-            "business_object_ids": ["B001"],
-            "priority": "P1",
-            "parent_id": "F001"
+            "feature_id": 3, 
+            "feature_name": "便签样式设置",
+            "feature_description": "支持便签颜色分类和字体样式、大小的调整",
+            "actor_ids": [1],
         },
         {
-            "feature_id": "F001-004",
-            "feature_name": "便签字体调整",
-            "feature_description": "支持调整便签内文字的字体、字号、颜色等显示样式",
-            "actor_ids": ["A001"],
-            "business_object_ids": ["B001"],
-            "priority": "P1",
-            "parent_id": "F001"
+            "feature_id": 4, 
+            "feature_name": "任务创建与截止时间设置",
+            "feature_description": "支持创建待办任务，并为任务设置截止时间",
+            "actor_ids": [1],
         },
         {
-            "feature_id": "F001-005",
-            "feature_name": "便签删除",
-            "feature_description": "支持删除不再需要的悬浮便签",
-            "actor_ids": ["A001"],
-            "business_object_ids": ["B001"],
-            "priority": "P0",
-            "parent_id": "F001"
+            "feature_id": 5, 
+            "feature_name": "任务完成状态标记",
+            "feature_description": "支持将已完成的待办任务进行标记区分",
+            "actor_ids": [1],
         },
         {
-            "feature_id": "F002",
-            "feature_name": "待办清单管理",
-            "feature_description": "对待办任务进行创建、状态管理、优先级设置及删除等操作",
-            "actor_ids": ["A001"],
-            "business_object_ids": ["B002"],
-            "priority": "P0",
-            "parent_id": ""
-        },
-        {
-            "feature_id": "F002-001",
-            "feature_name": "新建待办任务",
-            "feature_description": "支持创建待办任务条目，输入任务具体内容",
-            "actor_ids": ["A001"],
-            "business_object_ids": ["B002"],
-            "priority": "P0",
-            "parent_id": "F002"
-        },
-        {
-            "feature_id": "F002-002",
-            "feature_name": "设置任务截止时间",
-            "feature_description": "支持为待办任务设置具体的截止日期和时间",
-            "actor_ids": ["A001"],
-            "business_object_ids": ["B002"],
-            "priority": "P1",
-            "parent_id": "F002"
-        },
-        {
-            "feature_id": "F002-003",
-            "feature_name": "任务已完成标记",
-            "feature_description": "支持将已完成的待办任务标记为完成状态，区分未完成任务",
-            "actor_ids": ["A001"],
-            "business_object_ids": ["B002"],
-            "priority": "P0",
-            "parent_id": "F002"
-        },
-        {
-            "feature_id": "F002-004",
+            "feature_id": 6, 
             "feature_name": "重要任务置顶",
-            "feature_description": "支持将重要的待办任务置顶显示，优先提醒用户处理",
-            "actor_ids": ["A001"],
-            "business_object_ids": ["B002"],
-            "priority": "P1",
-            "parent_id": "F002"
+            "feature_description": "支持将重要的待办任务置顶显示，突出优先级",
+            "actor_ids": [1],
         },
         {
-            "feature_id": "F002-005",
-            "feature_name": "待办任务删除",
-            "feature_description": "支持删除不再需要的待办任务条目",
-            "actor_ids": ["A001"],
-            "business_object_ids": ["B002"],
-            "priority": "P0",
-            "parent_id": "F002"
-        },
-        {
-            "feature_id": "F003",
-            "feature_name": "系统设置与便捷操作",
-            "feature_description": "提供软件系统配置及提升使用效率的便捷操作功能",
-            "actor_ids": ["A001"],
-            "business_object_ids": ["B003"],
-            "priority": "P1",
-            "parent_id": ""
-        },
-        {
-            "feature_id": "F003-001",
-            "feature_name": "开机常驻启动",
+            "feature_id": 7, 
+            "feature_name": "开机常驻设置",
             "feature_description": "支持设置软件随系统开机自动启动并常驻后台运行",
-            "actor_ids": ["A001"],
-            "business_object_ids": ["B003"],
-            "priority": "P1",
-            "parent_id": "F003"
+            "actor_ids": [1],
         },
         {
-            "feature_id": "F003-002",
+            "feature_id": 8, 
             "feature_name": "便签背景透明化",
-            "feature_description": "支持调整便签的背景透明度，减少对桌面其他内容的遮挡",
-            "actor_ids": ["A001"],
-            "business_object_ids": ["B001", "B003"],
-            "priority": "P1",
-            "parent_id": "F003"
+            "feature_description": "支持调整便签背景的透明度，减少对桌面内容的遮挡",
+            "actor_ids": [1],
         },
         {
-            "feature_id": "F003-003",
+            "feature_id": 9, 
             "feature_name": "一键隐藏所有便签",
-            "feature_description": "支持通过快捷键或按钮一键隐藏/显示所有悬浮便签与待办清单",
-            "actor_ids": ["A001"],
-            "business_object_ids": ["B001", "B002", "B003"],
-            "priority": "P1",
-            "parent_id": "F003"
-        },
-        {
-            "feature_id": "F003-004",
-            "feature_name": "数据自动保存",
-            "feature_description": "系统自动定时保存用户创建的便签与待办数据，防止数据意外丢失",
-            "actor_ids": [],
-            "business_object_ids": ["B001", "B002", "B003"],
-            "priority": "P0",
-            "parent_id": "F003"
+            "feature_description": "提供一键操作，快速隐藏桌面上所有的悬浮便签",
+            "actor_ids": [1],
         }
     ]
 }
-### 当前整理出的流程
+### 当前整理出的流程（包括输入输出的结构）
 {
-    "flows": [
+    "business_objects": [
         {
-            "flow_id": "FL001",
-            "flow_name": "便签全生命周期管理流程",
-            "flow_description": "用户对桌面悬浮便签进行创建、编辑、样式调整、删除等全生命周期操作，系统自动保存便签数据", 
-            "flow_steps": [
+            "business_object_id": 1,
+            "business_object_name": "便签",
+            "business_object_description": "用户创建的悬浮在桌面的独立便签实体，包含内容、样式和位置信息",
+            "business_object_attributes": [
                 {
-                    "step_id": "FL001-001",
-                    "step_name": "新建独立便签",
-                    "step_description": "用户触发新建便签操作，系统根据默认系统配置创建一个新的悬浮便签，用户可拖动至桌面任意位置",
-                    "feature_ids": ["F001-001"],
-                    "actor_ids": ["A001"],
-                    "step_type": "actorAction",
-                    "input_business_object_ids": ["B003"],
-                    "output_business_object_ids": ["B001"]
+                    "business_object_attribute_name": "note_id",
+                    "business_object_attribute_description": "便签唯一标识符",
+                    "business_object_attribute_type": "string",
+                    "business_object_attribute_example": "note_20260517_001"
                 },
                 {
-                    "step_id": "FL001-002",
-                    "step_name": "便签文字编辑",
-                    "step_description": "用户在便签内进行文字输入、修改、删除等基础编辑操作",
-                    "feature_ids": ["F001-002"],
-                    "actor_ids": ["A001"],
-                    "step_type": "actorAction",
-                    "input_business_object_ids": ["B001"],
-                    "output_business_object_ids": ["B001"]
+                    "business_object_attribute_name": "content",
+                    "business_object_attribute_description": "便签内的文字内容",
+                    "business_object_attribute_type": "string",
+                    "business_object_attribute_example": "下午3点参加项目周会"
                 },
                 {
-                    "step_id": "FL001-003",
-                    "step_name": "便签颜色分类设置",
-                    "step_description": "用户为便签选择不同的背景颜色，用于分类区分不同主题的内容",
-                    "feature_ids": ["F001-003"],
-                    "actor_ids": ["A001"],
-                    "step_type": "actorAction",
-                    "input_business_object_ids": ["B001"],
-                    "output_business_object_ids": ["B001"]
+                    "business_object_attribute_name": "position",
+                    "business_object_attribute_description": "便签在桌面的坐标位置",
+                    "business_object_attribute_type": "string",
+                    "business_object_attribute_example": "200,150"
                 },
                 {
-                    "step_id": "FL001-004",
-                    "step_name": "便签字体调整",
-                    "step_description": "用户调整便签内文字的字体、字号、颜色等显示样式",
-                    "feature_ids": ["F001-004"],
-                    "actor_ids": ["A001"],
-                    "step_type": "actorAction",
-                    "input_business_object_ids": ["B001"],
-                    "output_business_object_ids": ["B001"]
+                    "business_object_attribute_name": "color",
+                    "business_object_attribute_description": "便签背景颜色",
+                    "business_object_attribute_type": "string",
+                    "business_object_attribute_example": "#FFE4B5"
                 },
                 {
-                    "step_id": "FL001-005",
-                    "step_name": "便签背景透明度调整",
-                    "step_description": "用户调整便签的背景透明度，减少对桌面其他内容的遮挡，同时更新系统默认透明度配置",
-                    "feature_ids": ["F003-002"],
-                    "actor_ids": ["A001"],
-                    "step_type": "actorAction",
-                    "input_business_object_ids": ["B001", "B003"],
-                    "output_business_object_ids": ["B001", "B003"]
+                    "business_object_attribute_name": "font_family",
+                    "business_object_attribute_description": "便签文字字体",
+                    "business_object_attribute_type": "string",
+                    "business_object_attribute_example": "微软雅黑"
                 },
                 {
-                    "step_id": "FL001-006",
-                    "step_name": "便签删除",
-                    "step_description": "用户触发删除操作，系统移除指定的悬浮便签",
-                    "feature_ids": ["F001-005"],
-                    "actor_ids": ["A001"],
-                    "step_type": "actorAction",
-                    "input_business_object_ids": ["B001"],
-                    "output_business_object_ids": []
+                    "business_object_attribute_name": "font_size",
+                    "business_object_attribute_description": "便签文字字号",
+                    "business_object_attribute_type": "integer",
+                    "business_object_attribute_example": "14"
                 },
                 {
-                    "step_id": "FL001-007",
-                    "step_name": "便签数据自动保存",
-                    "step_description": "系统按照设定的时间间隔自动保存用户创建或修改的便签数据，防止数据意外丢失",
-                    "feature_ids": ["F003-004"],
-                    "actor_ids": [],
-                    "step_type": "systemAction",
-                    "input_business_object_ids": ["B001"],
-                    "output_business_object_ids": ["B001"]
+                    "business_object_attribute_name": "transparency",
+                    "business_object_attribute_description": "便签背景透明度（0-100）",
+                    "business_object_attribute_type": "integer",
+                    "business_object_attribute_example": "80"
+                },
+                {
+                    "business_object_attribute_name": "is_hidden",
+                    "business_object_attribute_description": "便签是否处于隐藏状态",
+                    "business_object_attribute_type": "bool",
+                    "business_object_attribute_example": "false"
+                },
+                {
+                    "business_object_attribute_name": "create_time",
+                    "business_object_attribute_description": "便签创建时间",
+                    "business_object_attribute_type": "string",
+                    "business_object_attribute_example": "2026-05-17 10:30:00"
+                },
+                {
+                    "business_object_attribute_name": "update_time",
+                    "business_object_attribute_description": "便签最后更新时间",
+                    "business_object_attribute_type": "string",
+                    "business_object_attribute_example": "2026-05-17 10:35:00"
                 }
             ]
         },
         {
-            "flow_id": "FL002",
-            "flow_name": "待办任务全生命周期管理流程",
-            "flow_description": "用户对待办任务进行创建、截止时间设置、完成标记、置顶、删除等操作，系统自动保存待办数据", 
-            "flow_steps": [
+            "business_object_id": 2,
+            "business_object_name": "待办任务",
+            "business_object_description": "用户创建的待办事项实体，包含任务内容、截止时间和状态信息",
+            "business_object_attributes": [
                 {
-                    "step_id": "FL002-001",
-                    "step_name": "新建待办任务",
-                    "step_description": "用户触发新建待办任务操作，输入任务具体内容，系统创建新的待办任务条目",
-                    "feature_ids": ["F002-001"],
-                    "actor_ids": ["A001"],
-                    "step_type": "actorAction",
-                    "input_business_object_ids": [],
-                    "output_business_object_ids": ["B002"]
+                    "business_object_attribute_name": "task_id",
+                    "business_object_attribute_description": "待办任务唯一标识符",
+                    "business_object_attribute_type": "string",
+                    "business_object_attribute_example": "task_20260517_001"
                 },
                 {
-                    "step_id": "FL002-002",
-                    "step_name": "设置任务截止时间",
-                    "step_description": "用户为待办任务设置具体的截止日期和时间",
-                    "feature_ids": ["F002-002"],
-                    "actor_ids": ["A001"],
-                    "step_type": "actorAction",
-                    "input_business_object_ids": ["B002"],
-                    "output_business_object_ids": ["B002"]
+                    "business_object_attribute_name": "content",
+                    "business_object_attribute_description": "待办任务内容",
+                    "business_object_attribute_type": "string",
+                    "business_object_attribute_example": "完成需求文档撰写"
                 },
                 {
-                    "step_id": "FL002-003",
-                    "step_name": "任务已完成标记",
-                    "step_description": "用户将已完成的待办任务标记为完成状态，系统记录完成时间",
-                    "feature_ids": ["F002-003"],
-                    "actor_ids": ["A001"],
-                    "step_type": "actorAction",
-                    "input_business_object_ids": ["B002"],
-                    "output_business_object_ids": ["B002"]
+                    "business_object_attribute_name": "deadline",
+                    "business_object_attribute_description": "任务截止时间",
+                    "business_object_attribute_type": "string",
+                    "business_object_attribute_example": "2026-05-20 18:00:00"
                 },
                 {
-                    "step_id": "FL002-004",
-                    "step_name": "重要任务置顶",
-                    "step_description": "用户将重要的待办任务置顶显示，优先提醒用户处理",
-                    "feature_ids": ["F002-004"],
-                    "actor_ids": ["A001"],
-                    "step_type": "actorAction",
-                    "input_business_object_ids": ["B002"],
-                    "output_business_object_ids": ["B002"]
+                    "business_object_attribute_name": "is_completed",
+                    "business_object_attribute_description": "任务是否已完成",
+                    "business_object_attribute_type": "bool",
+                    "business_object_attribute_example": "false"
                 },
                 {
-                    "step_id": "FL002-005",
-                    "step_name": "待办任务删除",
-                    "step_description": "用户触发删除操作，系统移除指定的待办任务条目",
-                    "feature_ids": ["F002-005"],
-                    "actor_ids": ["A001"],
-                    "step_type": "actorAction",
-                    "input_business_object_ids": ["B002"],
-                    "output_business_object_ids": []
+                    "business_object_attribute_name": "is_pinned",
+                    "business_object_attribute_description": "任务是否置顶显示",
+                    "business_object_attribute_type": "bool",
+                    "business_object_attribute_example": "true"
                 },
                 {
-                    "step_id": "FL002-006",
-                    "step_name": "待办数据自动保存",
-                    "step_description": "系统按照设定的时间间隔自动保存用户创建或修改的待办任务数据，防止数据意外丢失",
-                    "feature_ids": ["F003-004"],
-                    "actor_ids": [],
-                    "step_type": "systemAction",
-                    "input_business_object_ids": ["B002"],
-                    "output_business_object_ids": ["B002"]
+                    "business_object_attribute_name": "create_time",
+                    "business_object_attribute_description": "任务创建时间",
+                    "business_object_attribute_type": "string",
+                    "business_object_attribute_example": "2026-05-17 11:00:00"
                 },
+                {
+                    "business_object_attribute_name": "update_time",
+                    "business_object_attribute_description": "任务最后更新时间",
+                    "business_object_attribute_type": "string",
+                    "business_object_attribute_example": "2026-05-17 11:05:00"
+                }
             ]
         },
         {
-            "flow_id": "FL003",
-            "flow_name": "系统配置与便捷操作流程",
-            "flow_description": "用户进行软件全局系统配置及使用便捷操作，系统应用配置并执行对应操作，自动保存配置数据", 
+            "business_object_id": 3,
+            "business_object_name": "系统全局设置",
+            "business_object_description": "软件的全局配置信息，包含开机启动、显示控制等设置",
+            "business_object_attributes": [
+                {
+                    "business_object_attribute_name": "auto_start",
+                    "business_object_attribute_description": "是否随系统开机自动启动",
+                    "business_object_attribute_type": "bool",
+                    "business_object_attribute_example": "true"
+                },
+                {
+                    "business_object_attribute_name": "all_notes_hidden",
+                    "business_object_attribute_description": "所有便签是否处于全局隐藏状态",
+                    "business_object_attribute_type": "bool",
+                    "business_object_attribute_example": "false"
+                },
+                {
+                    "business_object_attribute_name": "default_note_color",
+                    "business_object_attribute_description": "新建便签默认背景颜色",
+                    "business_object_attribute_type": "string",
+                    "business_object_attribute_example": "#FFFFE0"
+                },
+                {
+                    "business_object_attribute_name": "default_font_size",
+                    "business_object_attribute_description": "新建便签默认文字字号",
+                    "business_object_attribute_type": "integer",
+                    "business_object_attribute_example": "14"
+                }
+            ]
+        }
+    ],
+    "flows": [
+        {
+            "flow_name": "便签创建与管理流程",
+            "flow_description": "用户创建、编辑、调整样式和位置、设置透明度并管理便签的完整流程",
+            "feature_ids": [1, 2, 3, 8],
             "flow_steps": [
                 {
-                    "step_id": "FL003-001",
-                    "step_name": "设置开机常驻启动",
-                    "step_description": "用户设置软件随系统开机自动启动并常驻后台运行",
-                    "feature_ids": ["F003-001"],
-                    "actor_ids": ["A001"],
+                    "step_id": 1,
+                    "step_name": "触发新建便签",
+                    "step_description": "用户通过右键菜单或快捷键触发新建便签操作",
+                    "actor_ids": [1],
                     "step_type": "actorAction",
-                    "input_business_object_ids": ["B003"],
-                    "output_business_object_ids": ["B003"]
+                    "input_business_object_ids": [],
+                    "output_business_object_ids": [1],
+                    "next_step_ids": [2]
                 },
                 {
-                    "step_id": "FL003-002",
-                    "step_name": "一键隐藏/显示所有便签与待办",
-                    "step_description": "用户通过快捷键或按钮触发一键隐藏/显示操作，系统切换所有悬浮便签与待办清单的显示状态",
-                    "feature_ids": ["F003-003"],
-                    "actor_ids": ["A001"],
-                    "step_type": "actorAction",
-                    "input_business_object_ids": ["B001", "B002", "B003"],
-                    "output_business_object_ids": ["B001", "B002", "B003"]
-                },
-                {
-                    "step_id": "FL003-003",
-                    "step_name": "系统配置自动保存",
-                    "step_description": "系统按照设定的时间间隔自动保存用户修改的系统配置数据，防止配置丢失",
-                    "feature_ids": ["F003-004"],
+                    "step_id": 2,
+                    "step_name": "创建并显示空白便签",
+                    "step_description": "系统根据默认设置创建空白便签并显示在桌面默认位置",
                     "actor_ids": [],
                     "step_type": "systemAction",
-                    "input_business_object_ids": ["B003"],
-                    "output_business_object_ids": ["B003"]
+                    "input_business_object_ids": [1, 3],
+                    "output_business_object_ids": [1],
+                    "next_step_ids": [3, 4, 5, 6, 7]
+                },
+                {
+                    "step_id": 3,
+                    "step_name": "编辑便签内容",
+                    "step_description": "用户在便签内输入、修改或删除文字内容",
+                    "actor_ids": [1],
+                    "step_type": "actorAction",
+                    "input_business_object_ids": [1],
+                    "output_business_object_ids": [1],
+                    "next_step_ids": [4, 5, 6, 7]
+                },
+                {
+                    "step_id": 4,
+                    "step_name": "调整便签位置",
+                    "step_description": "用户拖动便签到桌面任意位置",
+                    "actor_ids": [1],
+                    "step_type": "actorAction",
+                    "input_business_object_ids": [1],
+                    "output_business_object_ids": [1],
+                    "next_step_ids": [3, 5, 6, 7]
+                },
+                {
+                    "step_id": 5,
+                    "step_name": "设置便签样式",
+                    "step_description": "用户选择便签背景颜色、调整字体样式和字号",
+                    "actor_ids": [1],
+                    "step_type": "actorAction",
+                    "input_business_object_ids": [1],
+                    "output_business_object_ids": [1],
+                    "next_step_ids": [3, 4, 6, 7]
+                },
+                {
+                    "step_id": 6,
+                    "step_name": "调整便签透明度",
+                    "step_description": "用户拖动滑块调整便签背景的透明度",
+                    "actor_ids": [1],
+                    "step_type": "actorAction",
+                    "input_business_object_ids": [1],
+                    "output_business_object_ids": [1],
+                    "next_step_ids": [3, 4, 5, 7]
+                },
+                {
+                    "step_id": 7,
+                    "step_name": "保存便签修改",
+                    "step_description": "系统自动保存便签的所有修改内容",
+                    "actor_ids": [],
+                    "step_type": "systemAction",
+                    "input_business_object_ids": [1],
+                    "output_business_object_ids": [1],
+                    "next_step_ids": []
+                }
+            ]
+        },
+        {
+            "flow_name": "待办任务管理流程",
+            "flow_description": "用户创建待办任务、设置截止时间、标记完成状态和置顶重要任务的流程",
+            "feature_ids": [4, 5, 6],
+            "flow_steps": [
+                {
+                    "step_id": 1,
+                    "step_name": "触发新建待办任务",
+                    "step_description": "用户在待办清单界面点击新建按钮触发任务创建",
+                    "actor_ids": [1],
+                    "step_type": "actorAction",
+                    "input_business_object_ids": [],
+                    "output_business_object_ids": [2],
+                    "next_step_ids": [2]
+                },
+                {
+                    "step_id": 2,
+                    "step_name": "创建并显示空白任务",
+                    "step_description": "系统创建空白待办任务并显示在待办清单中",
+                    "actor_ids": [],
+                    "step_type": "systemAction",
+                    "input_business_object_ids": [2],
+                    "output_business_object_ids": [2],
+                    "next_step_ids": [3, 4, 5, 6, 7]
+                },
+                {
+                    "step_id": 3,
+                    "step_name": "输入任务内容",
+                    "step_description": "用户输入待办任务的具体内容",
+                    "actor_ids": [1],
+                    "step_type": "actorAction",
+                    "input_business_object_ids": [2],
+                    "output_business_object_ids": [2],
+                    "next_step_ids": [4, 5, 6, 7]
+                },
+                {
+                    "step_id": 4,
+                    "step_name": "设置任务截止时间",
+                    "step_description": "用户选择并设置任务的截止日期和时间",
+                    "actor_ids": [1],
+                    "step_type": "actorAction",
+                    "input_business_object_ids": [2],
+                    "output_business_object_ids": [2],
+                    "next_step_ids": [3, 5, 6, 7]
+                },
+                {
+                    "step_id": 5,
+                    "step_name": "标记任务完成状态",
+                    "step_description": "用户点击复选框标记任务为已完成或未完成",
+                    "actor_ids": [1],
+                    "step_type": "actorAction",
+                    "input_business_object_ids": [2],
+                    "output_business_object_ids": [2],
+                    "next_step_ids": [3, 4, 6, 7]
+                },
+                {
+                    "step_id": 6,
+                    "step_name": "置顶重要任务",
+                    "step_description": "用户点击置顶按钮将重要任务显示在清单顶部",
+                    "actor_ids": [1],
+                    "step_type": "actorAction",
+                    "input_business_object_ids": [2],
+                    "output_business_object_ids": [2],
+                    "next_step_ids": [3, 4, 5, 7]
+                },
+                {
+                    "step_id": 7,
+                    "step_name": "保存任务修改",
+                    "step_description": "系统自动保存待办任务的所有修改内容",
+                    "actor_ids": [],
+                    "step_type": "systemAction",
+                    "input_business_object_ids": [2],
+                    "output_business_object_ids": [2],
+                    "next_step_ids": []
+                }
+            ]
+        },
+        {
+            "flow_name": "系统全局设置流程",
+            "flow_description": "用户设置软件开机常驻、一键隐藏所有便签等全局功能的流程",
+            "feature_ids": [7, 9],
+            "flow_steps": [
+                {
+                    "step_id": 1,
+                    "step_name": "打开系统设置界面",
+                    "step_description": "用户通过托盘图标右键菜单打开系统设置界面",
+                    "actor_ids": [1],
+                    "step_type": "actorAction",
+                    "input_business_object_ids": [],
+                    "output_business_object_ids": [3],
+                    "next_step_ids": [2]
+                },
+                {
+                    "step_id": 2,
+                    "step_name": "加载当前系统设置",
+                    "step_description": "系统加载并显示当前的全局配置信息",
+                    "actor_ids": [],
+                    "step_type": "systemAction",
+                    "input_business_object_ids": [3],
+                    "output_business_object_ids": [3],
+                    "next_step_ids": [3, 4, 5]
+                },
+                {
+                    "step_id": 3,
+                    "step_name": "设置开机常驻选项",
+                    "step_description": "用户勾选或取消开机自动启动选项",
+                    "actor_ids": [1],
+                    "step_type": "actorAction",
+                    "input_business_object_ids": [3],
+                    "output_business_object_ids": [3],
+                    "next_step_ids": [4, 5]
+                },
+                {
+                    "step_id": 4,
+                    "step_name": "一键隐藏所有便签",
+                    "step_description": "用户点击一键隐藏按钮或使用快捷键隐藏所有桌面便签",
+                    "actor_ids": [1],
+                    "step_type": "actorAction",
+                    "input_business_object_ids": [3, 1],
+                    "output_business_object_ids": [3, 1],
+                    "next_step_ids": [3, 5]
+                },
+                {
+                    "step_id": 5,
+                    "step_name": "保存系统设置",
+                    "step_description": "系统保存用户修改后的全局配置信息",
+                    "actor_ids": [],
+                    "step_type": "systemAction",
+                    "input_business_object_ids": [3],
+                    "output_business_object_ids": [3],
+                    "next_step_ids": []
                 }
             ]
         }

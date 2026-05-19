@@ -57,7 +57,7 @@ flows_generate_prompt = """
                     "step_type": "<步骤类型：actorAction|systemAction|judgment>（例如用户输入即为actorAction类型）", 
                     "input_business_object_numbers": ["<输入的业务对象1的编号>", "<输入的业务对象2的编号>", ...(可空)], 
                     "output_business_object_numbers": ["<输出的业务对象1的编号>", "<输出的业务对象2的编号>", ...(可空)], 
-                    "next_steps" ["<下一步走向1的编号>", "<下一步走向2的编号>", ...(可空，空表示流程结束；多个值表示该点为分岔点，存在多种可能的路径)]
+                    "next_steps": ["<下一步走向1的编号>", "<下一步走向2的编号>", ...(可空，空表示流程结束；多个值表示该点为分岔点，存在多种可能的路径)]
                 }, 
                 {
                     "step_number": "<步骤编号：例如S-002>", 
@@ -67,7 +67,7 @@ flows_generate_prompt = """
                     "step_type": "<步骤类型：actorAction|systemAction|judgment>（例如用户输入即为actorAction类型）", 
                     "input_business_object_numbers": ["<输入的业务对象1的编号>", "<输入的业务对象2的编号>", ...(可空)], 
                     "output_business_object_numbers": ["<输出的业务对象1的编号>", "<输出的业务对象2的编号>", ...(可空)], 
-                    "next_steps" ["<下一步走向1的编号>", "<下一步走向2的编号>", ...(可空，空表示流程结束；多个值表示该点为分岔点，存在多种可能的路径)]
+                    "next_steps": ["<下一步走向1的编号>", "<下一步走向2的编号>", ...(可空，空表示流程结束；多个值表示该点为分岔点，存在多种可能的路径)]
                 }, 
                 ...
             ]  
@@ -80,7 +80,13 @@ flows_generate_prompt = """
 1. 只输出一个 JSON 对象。
 2. 不要输出任何解释、分析过程、Markdown、代码块标记或额外前后缀文字。
 3. 输出 JSON 风格的标准格式化内容，而不是被压缩的一行内容。
-4. 不同flow内的步骤编号不互相自增规则，即两个不同的flow可以存在步骤编号一致的情况。
+4. business_object_number 必须全局唯一，格式为 B-001、B-002。
+5. step_number 只需要在当前 flow 内唯一，格式为 S-001、S-002。
+6. next_steps 只能引用当前 flow 内存在的 step_number。
+7. input_business_object_numbers 和 output_business_object_numbers 只能引用 business_objects 中存在的 business_object_number。
+8. feature_ids 只能引用系统能力输入中存在的 feature_id。
+9. step_type 只能是 actorAction、systemAction、judgment。
+10. business_object_attribute_example 必须是字符串。即使 business_object_attribute_type 是 integer、bool、array[string]、object等，也必须把示例值写成字符串。例如："business_object_attribute_type": "integer","business_object_attribute_example": "14"。
 
 # 示例
 ## 示例输入
