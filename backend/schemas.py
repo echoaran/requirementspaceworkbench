@@ -156,6 +156,12 @@ class PerceptionSlot(BaseNode):
     perceptionKind: PerceptionKindType
     perceptionDescription: str
 
+# 原型预览
+@node_dataclass
+class PreviewUI(BaseNode):
+    kind: str = field(default="preview_ui", init=False)
+    # 暂未确定
+
 @node_dataclass
 class RequirementSpace(BaseNode):
     """需求空间，包含整个项目的所有需求信息"""

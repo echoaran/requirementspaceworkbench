@@ -1,8 +1,13 @@
 from dataclasses import dataclass
 import json
-from typing import Dict,List
+from typing import Any, Dict, List
 
-from backend.core.generators.prompts import flows_generate_prompt
+from backend.core.generators.prompts import (
+    business_object_in_flows_prompt,
+    business_objects_generate_prompt,
+    flows_generate_prompt,
+    flows_generate_prompt_old,
+)
 from backend.core.generators.base_generator import BaseGenerator, GenerateInput
 from backend.schemas import FeatureNode, ActorNode
 
@@ -14,7 +19,11 @@ class FlowsGeneratorInput(GenerateInput):
     features: List[FeatureNode]
 
 class FlowsGenerator(BaseGenerator[FlowsGeneratorInput]):
-    async def generate(self, input_data: FlowsGeneratorInput) -> Dict:
+    async def generate(
+        self,
+        input_data: FlowsGeneratorInput,
+        use_old_prompt: bool = False,
+    ) -> Dict:
         user_requirements_ = input_data.user_requirements
 
         actors_payload = ActorNode.schema(
@@ -39,7 +48,21 @@ class FlowsGenerator(BaseGenerator[FlowsGeneratorInput]):
             indent=2
         )
 
-        response = await self._llm_handler.call_llm(
+        if use_old_prompt:
+            response = await self._llm_handler.call_llm(
+                prompt=flows_generate_prompt_old.replace(
+                    "{{user_requirements}}", f"{user_requirements_}").replace(
+                    "{{actors}}", f"{actors_}").replace(
+                    "{{features}}", f"{features_}"
+                ),
+                print_log=False,
+            )
+            result = self._loads_llm_json(response)
+            if not isinstance(result, dict):
+                raise ValueError("invalid_llm_response")
+            return result
+
+        flows_response = await self._llm_handler.call_llm(
             prompt=flows_generate_prompt.replace(
                 "{{user_requirements}}",f"{user_requirements_}").replace(
                 "{{actors}}", f"{actors_}").replace(
@@ -47,7 +70,133 @@ class FlowsGenerator(BaseGenerator[FlowsGeneratorInput]):
             ),
             print_log=False,
         )
+        flows_result = self._loads_llm_json(flows_response)
+        if not isinstance(flows_result, dict):
+            raise ValueError("invalid_llm_response")
+
+        flows_ = self._dumps_prompt_payload({"flows": flows_result.get("flows", [])})
+
+        business_objects_response = await self._llm_handler.call_llm(
+            prompt=business_objects_generate_prompt.replace(
+                "{{user_requirements}}", f"{user_requirements_}").replace(
+                "{{flows}}", flows_
+            ),
+            print_log=False,
+        )
+        business_objects_result = self._loads_llm_json(business_objects_response)
+        if not isinstance(business_objects_result, dict):
+            raise ValueError("invalid_llm_response")
+
+        business_objects_ = self._dumps_prompt_payload(
+            {
+                "business_objects": business_objects_result.get(
+                    "business_objects",
+                    [],
+                )
+            }
+        )
+
+        relations_response = await self._llm_handler.call_llm(
+            prompt=business_object_in_flows_prompt.replace(
+                "{{user_requirements}}", f"{user_requirements_}").replace(
+                "{{flows}}", flows_).replace(
+                "{{business_objects}}", business_objects_
+            ),
+            print_log=True,
+        )
+        relations_result = self._loads_llm_json(relations_response)
+
+        return self._merge_generation_results(
+            flows_result=flows_result,
+            business_objects_result=business_objects_result,
+            relations_result=relations_result,
+        )
+
+    @staticmethod
+    def _loads_llm_json(response: str | None) -> Any:
+        if response is None:
+            raise ValueError("empty_llm_response")
+
         return json.loads(response)
+
+    @staticmethod
+    def _dumps_prompt_payload(payload: dict) -> str:
+        return json.dumps(
+            payload,
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    @staticmethod
+    def _merge_generation_results(
+        flows_result: dict,
+        business_objects_result: dict,
+        relations_result: Any,
+    ) -> dict:
+        flows = flows_result.get("flows", [])
+        if not isinstance(flows, list):
+            flows = []
+
+        business_objects = business_objects_result.get("business_objects", [])
+        if not isinstance(business_objects, list):
+            business_objects = []
+
+        if isinstance(relations_result, dict):
+            relations = relations_result.get("business_object_in_flows")
+            if relations is None:
+                relations = relations_result.get("flows")
+        else:
+            relations = relations_result
+
+        if not isinstance(relations, list):
+            relations = []
+
+        relation_by_flow_name = {
+            relation.get("flow_name"): relation
+            for relation in relations
+            if isinstance(relation, dict) and relation.get("flow_name")
+        }
+
+        for flow_index, flow in enumerate(flows):
+            if not isinstance(flow, dict):
+                continue
+
+            relation = relation_by_flow_name.get(flow.get("flow_name"))
+            if relation is None and flow_index < len(relations):
+                relation = relations[flow_index]
+
+            step_relation_by_number = {}
+            if isinstance(relation, dict):
+                step_relation_by_number = {
+                    step_relation.get("step_number"): step_relation
+                    for step_relation in relation.get("flow_steps", [])
+                    if (
+                        isinstance(step_relation, dict)
+                        and step_relation.get("step_number")
+                    )
+                }
+
+            for step in flow.get("flow_steps", []):
+                if not isinstance(step, dict):
+                    continue
+
+                step_relation = step_relation_by_number.get(
+                    step.get("step_number"),
+                    {},
+                )
+                step["input_business_object_numbers"] = step_relation.get(
+                    "input_business_object_numbers",
+                    [],
+                )
+                step["output_business_object_numbers"] = step_relation.get(
+                    "output_business_object_numbers",
+                    [],
+                )
+
+        return {
+            "business_objects": business_objects,
+            "flows": flows,
+        }
 
 
 if __name__ == "__main__":
@@ -59,143 +208,250 @@ if __name__ == "__main__":
     test_actors = [
         ActorNode(
             actorId=1,
-            actorName="普通用户",
-            actorDescription="使用本地音乐播放器进行本地音乐导入、播放、歌单管理、歌词查看、音效调节、定时关闭和快捷切歌的个人用户"
+            actorName="本地音乐听众",
+            actorDescription="本地音乐听众是指在需要播放和聆听电脑本地音乐文件的场景下，与音乐播放器发生交互，并可执行导入或扫描本地音乐、播放暂停、切换上一首下一首、调整播放进度、管理播放列表和选择音频格式进行播放等操作的用户角色。"
+        ),
+        ActorNode(
+            actorId=2,
+            actorName="歌单管理者",
+            actorDescription="歌单管理者是指在需要按个人喜好整理和归类本地音乐的场景下，与歌单管理功能发生交互，并可执行新建歌单、编辑歌单、添加或移除歌曲、排序歌曲、删除歌单和自定义歌单内容等操作的用户角色。"
+        ),
+        ActorNode(
+            actorId=3,
+            actorName="音效调节者",
+            actorDescription="音效调节者是指在需要根据听感优化音乐播放效果的场景下，与音效设置功能发生交互，并可执行调整均衡器、配置音效参数、切换预设音效和保存个人音效偏好等操作的用户角色。"
+        ),
+        ActorNode(
+            actorId=4,
+            actorName="歌词匹配者",
+            actorDescription="歌词匹配者是指在需要查看本地歌曲对应歌词的场景下，与歌词匹配功能发生交互，并可执行本地歌词自动匹配、查看歌词显示、调整歌词同步效果和管理歌词关联结果等操作的用户角色。"
+        ),
+        ActorNode(
+            actorId=5,
+            actorName="睡眠定时设置者",
+            actorDescription="睡眠定时设置者是指在需要限定音乐播放时长并在指定时间自动关闭播放器的场景下，与睡眠定时功能发生交互，并可执行设置定时关闭时间、取消定时、查看倒计时和管理播放结束行为等操作的用户角色。"
+        ),
+        ActorNode(
+            actorId=6,
+            actorName="快捷键控制者",
+            actorDescription="快捷键控制者是指在需要通过全局快捷键快速控制播放的场景下，与全局快捷键功能发生交互，并可执行设置切歌快捷键、使用快捷键播放暂停、上一首下一首切换和快速调节播放控制等操作的用户角色。"
+        ),
+        ActorNode(
+            actorId=7,
+            actorName="界面偏好设置者",
+            actorDescription="界面偏好设置者是指在需要让播放器保持清爽、轻量和低干扰使用体验的场景下，与界面设置功能发生交互，并可执行调整界面显示样式、切换轻量化布局、配置视觉风格和管理播放器外观偏好的用户角色。"
         ),
     ]
     test_features: List[FeatureNode] = [
         FeatureNode(
             featureId=1,
             featureName="极简纯净本地音乐播放器",
-            featureDescription="一款不联网、无会员、无广告的轻量化本地音乐播放器，仅支持读取电脑本地音乐文件，提供无损音频播放、歌词匹配、音效调节、歌单管理、睡眠定时和全局快捷键切歌等核心能力，旨在替代臃肿的主流音乐播放器",
-            actorIds=[1],
-            childrenIds=[2, 6, 10, 13, 16]
+            featureDescription="系统用于在电脑本地离线播放音乐文件，支持无损与常见音频格式播放，并提供歌词匹配、音效均衡、歌单管理、睡眠定时、全局快捷键和轻量化界面等功能，旨在替代臃肿的主流音乐播放器。",
+            actorIds=[1, 2, 3, 4, 5, 6, 7],
+            childrenIds=[2, 6, 10, 14, 18, 22, 26]
         ),
         FeatureNode(
             featureId=2,
-            featureName="本地音乐库管理",
-            featureDescription="实现对电脑本地音乐文件的导入、识别、整理与基础浏览能力，作为播放器的内容来源管理中心",
+            featureName="本地音乐播放管理",
+            featureDescription="支持读取电脑本地音乐文件并进行播放控制、进度调整和格式播放管理。",
             actorIds=[1],
             childrenIds=[3, 4, 5]
         ),
         FeatureNode(
             featureId=3,
-            featureName="本地文件读取",
-            featureDescription="仅扫描和读取电脑本地存储中的音乐文件，不进行联网获取或云端同步",
+            featureName="扫描与导入本地音乐",
+            featureDescription="支持从电脑本地读取、扫描和导入音乐文件，作为播放器的媒体来源。",
             actorIds=[1],
             childrenIds=[]
         ),
         FeatureNode(
             featureId=4,
-            featureName="音频格式识别",
-            featureDescription="支持识别并管理 Flac、WAV、MP3 等本地音频文件格式",
-            actorIds=[1],
+            featureName="播放控制",
+            featureDescription="支持播放、暂停、上一首、下一首和播放进度调整等基础播放操作。",
+            actorIds=[1, 6],
             childrenIds=[]
         ),
         FeatureNode(
             featureId=5,
-            featureName="音乐库浏览",
-            featureDescription="支持按本地音乐列表进行浏览、查看与选择播放",
+            featureName="音频格式播放",
+            featureDescription="支持播放本地无损及常见音频格式文件，包括 Flac、WAV 和 MP3。",
             actorIds=[1],
             childrenIds=[]
         ),
         FeatureNode(
             featureId=6,
-            featureName="音乐播放控制",
-            featureDescription="提供基础且流畅的本地音乐播放与切换控制能力",
-            actorIds=[1],
+            featureName="歌单自定义管理",
+            featureDescription="支持用户按个人喜好创建、编辑和维护本地音乐歌单。",
+            actorIds=[2, 1],
             childrenIds=[7, 8, 9]
         ),
         FeatureNode(
             featureId=7,
-            featureName="播放与暂停控制",
-            featureDescription="支持对本地音乐进行播放、暂停、继续等基础控制",
-            actorIds=[1],
+            featureName="新建与删除歌单",
+            featureDescription="支持用户创建新的歌单并删除不再需要的歌单。",
+            actorIds=[2],
             childrenIds=[]
         ),
         FeatureNode(
             featureId=8,
-            featureName="上一首下一首切换",
-            featureDescription="支持在当前播放列表或音乐库中切换上一首、下一首曲目",
-            actorIds=[1],
+            featureName="添加或移除歌曲",
+            featureDescription="支持用户将本地歌曲添加到歌单中或从歌单中移除。",
+            actorIds=[2, 1],
             childrenIds=[]
         ),
         FeatureNode(
             featureId=9,
-            featureName="播放进度与音量控制",
-            featureDescription="支持调节播放进度和基础音量，以满足日常播放操作需求",
-            actorIds=[1],
+            featureName="歌单排序与自定义内容",
+            featureDescription="支持用户调整歌单内歌曲顺序，并按个人偏好自定义歌单内容。",
+            actorIds=[2],
             childrenIds=[]
         ),
         FeatureNode(
             featureId=10,
-            featureName="歌词与音效设置",
-            featureDescription="提供本地歌词匹配与播放音效调节能力，增强本地听歌体验",
-            actorIds=[1],
-            childrenIds=[11, 12]
+            featureName="歌词匹配与显示",
+            featureDescription="支持本地歌曲歌词自动匹配、显示与同步管理。",
+            actorIds=[4],
+            childrenIds=[11, 12, 13]
         ),
         FeatureNode(
             featureId=11,
-            featureName="本地歌词匹配",
-            featureDescription="支持自动匹配并显示本地歌词内容，便于同步查看歌曲歌词",
-            actorIds=[1],
+            featureName="本地歌词自动匹配",
+            featureDescription="支持根据本地歌曲自动匹配对应歌词文件或歌词内容。",
+            actorIds=[4],
             childrenIds=[]
         ),
         FeatureNode(
             featureId=12,
-            featureName="音效均衡器调节",
-            featureDescription="支持调整均衡器等音效参数，以自定义音乐播放效果",
-            actorIds=[1],
+            featureName="歌词显示与同步调整",
+            featureDescription="支持在播放界面显示歌词，并调整歌词同步效果以匹配播放进度。",
+            actorIds=[4, 1],
             childrenIds=[]
         ),
         FeatureNode(
             featureId=13,
-            featureName="歌单与播放计划管理",
-            featureDescription="支持用户根据个人偏好自定义歌单，并设置定时停止播放等播放计划",
-            actorIds=[1],
-            childrenIds=[14, 15]
-        ),
-        FeatureNode(
-            featureId=14,
-            featureName="歌单自定义",
-            featureDescription="支持创建、编辑、删除自定义歌单，并将本地歌曲加入对应歌单",
-            actorIds=[1],
+            featureName="歌词关联管理",
+            featureDescription="支持用户管理歌词与歌曲的关联结果，便于维护匹配准确性。",
+            actorIds=[4],
             childrenIds=[]
         ),
         FeatureNode(
+            featureId=14,
+            featureName="音效与均衡器设置",
+            featureDescription="支持用户根据听感调整音效参数与均衡器配置。",
+            actorIds=[3],
+            childrenIds=[15, 16, 17]
+        ),
+        FeatureNode(
             featureId=15,
-            featureName="睡眠定时关闭",
-            featureDescription="支持设置定时关闭播放器或停止播放，适合睡前自动结束播放",
-            actorIds=[1],
+            featureName="均衡器调节",
+            featureDescription="支持用户调整均衡器各频段参数，以优化不同音乐风格的听感。",
+            actorIds=[3],
             childrenIds=[]
         ),
         FeatureNode(
             featureId=16,
-            featureName="快捷操作与界面设置",
-            featureDescription="提供全局快捷键操作和清爽轻量化界面，以提升使用便捷性和界面纯净度",
-            actorIds=[1],
-            childrenIds=[17, 18]
+            featureName="音效参数配置",
+            featureDescription="支持用户配置音效相关参数，并保存个人偏好设置。",
+            actorIds=[3],
+            childrenIds=[]
         ),
         FeatureNode(
             featureId=17,
-            featureName="全局快捷键切歌",
-            featureDescription="支持在系统任意界面通过全局快捷键进行切歌等播放控制",
-            actorIds=[1],
+            featureName="预设音效切换",
+            featureDescription="支持用户切换系统提供的预设音效方案。",
+            actorIds=[3],
             childrenIds=[]
         ),
         FeatureNode(
             featureId=18,
-            featureName="清爽轻量化界面",
-            featureDescription="提供简洁、纯净、轻量化的界面展示方式，避免冗余功能干扰",
-            actorIds=[1],
+            featureName="睡眠定时关闭",
+            featureDescription="支持设置定时关闭播放器，在指定时间自动停止播放并退出或关闭程序。",
+            actorIds=[5],
+            childrenIds=[19, 20, 21]
+        ),
+        FeatureNode(
+            featureId=19,
+            featureName="设置定时关闭时间",
+            featureDescription="支持用户设置播放器在指定时间后自动关闭。",
+            actorIds=[5],
+            childrenIds=[]
+        ),
+        FeatureNode(
+            featureId=20,
+            featureName="取消定时与查看倒计时",
+            featureDescription="支持用户取消已设置的定时关闭，并查看剩余倒计时。",
+            actorIds=[5],
+            childrenIds=[]
+        ),
+        FeatureNode(
+            featureId=21,
+            featureName="管理播放结束行为",
+            featureDescription="支持用户配置定时结束后播放器的处理方式，如停止播放或关闭程序。",
+            actorIds=[5],
+            childrenIds=[]
+        ),
+        FeatureNode(
+            featureId=22,
+            featureName="全局快捷键控制",
+            featureDescription="支持通过系统全局快捷键快速控制音乐播放。",
+            actorIds=[6],
+            childrenIds=[23, 24, 25]
+        ),
+        FeatureNode(
+            featureId=23,
+            featureName="切歌快捷键设置",
+            featureDescription="支持用户设置全局切歌快捷键，以便快速控制播放。",
+            actorIds=[6],
+            childrenIds=[]
+        ),
+        FeatureNode(
+            featureId=24,
+            featureName="快捷键播放控制",
+            featureDescription="支持通过全局快捷键执行播放、暂停、上一首和下一首操作。",
+            actorIds=[6, 1],
+            childrenIds=[]
+        ),
+        FeatureNode(
+            featureId=25,
+            featureName="快速调节播放状态",
+            featureDescription="支持通过快捷键快速调整当前播放状态，提升操作效率。",
+            actorIds=[6],
+            childrenIds=[]
+        ),
+        FeatureNode(
+            featureId=26,
+            featureName="清爽轻量化界面设置",
+            featureDescription="支持配置播放器界面风格与显示方式，保持界面简洁、轻量和低干扰。",
+            actorIds=[7],
+            childrenIds=[27, 28, 29]
+        ),
+        FeatureNode(
+            featureId=27,
+            featureName="界面显示样式调整",
+            featureDescription="支持用户调整界面显示样式，使播放器保持清爽直观。",
+            actorIds=[7],
+            childrenIds=[]
+        ),
+        FeatureNode(
+            featureId=28,
+            featureName="轻量化布局切换",
+            featureDescription="支持用户切换轻量化布局，减少不必要的视觉元素与操作干扰。",
+            actorIds=[7],
+            childrenIds=[]
+        ),
+        FeatureNode(
+            featureId=29,
+            featureName="视觉风格与外观偏好管理",
+            featureDescription="支持用户配置播放器视觉风格，满足长期使用中的外观偏好。",
+            actorIds=[7],
             childrenIds=[]
         )
     ]
 
     async def main():
-         await flows_generator.generate(
+        await flows_generator.generate(
             FlowsGeneratorInput(user_requirements, test_actors, test_features)
-        )
+         )
     asyncio.run(main())
 
     flows_generator_result = """
@@ -203,887 +459,1240 @@ if __name__ == "__main__":
   "business_objects": [
     {
       "business_object_number": "B-001",
-      "business_object_name": "音乐文件",
-      "business_object_description": "本地存储中的音频文件实体，用于被播放器扫描、识别、播放和管理",
+      "business_object_name": "本地音乐文件",
+      "business_object_description": "播放器从电脑本地扫描、识别并读取的音频文件对象，作为播放、导入、歌词匹配和歌单管理的基础数据来源。",
       "business_object_attributes": [
         {
           "business_object_attribute_name": "music_id",
-          "business_object_attribute_description": "音乐文件唯一标识",
+          "business_object_attribute_description": "本地音乐文件唯一标识",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "music_20260517_0001"
+          "business_object_attribute_example": "M-001"
+        },
+        {
+          "business_object_attribute_name": "file_path",
+          "business_object_attribute_description": "音乐文件在本地磁盘中的完整路径",
+          "business_object_attribute_type": "string",
+          "business_object_attribute_example": "D:\\\\Music\\\\周杰伦\\\\晴天.flac"
         },
         {
           "business_object_attribute_name": "file_name",
           "business_object_attribute_description": "音乐文件名称",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "Night_Sky.flac"
+          "business_object_attribute_example": "晴天.flac"
         },
         {
-          "business_object_attribute_name": "file_path",
-          "business_object_attribute_description": "本地文件完整路径",
-          "business_object_attribute_type": "string",
-          "business_object_attribute_example": "D:/Music/Album1/Night_Sky.flac"
-        },
-        {
-          "business_object_attribute_name": "format",
-          "business_object_attribute_description": "音频文件格式",
+          "business_object_attribute_name": "audio_format",
+          "business_object_attribute_description": "音频格式类型",
           "business_object_attribute_type": "string",
           "business_object_attribute_example": "flac"
         },
         {
-          "business_object_attribute_name": "duration",
-          "business_object_attribute_description": "音频时长，单位秒",
+          "business_object_attribute_name": "duration_seconds",
+          "business_object_attribute_description": "音频时长，单位为秒",
           "business_object_attribute_type": "integer",
-          "business_object_attribute_example": 245
+          "business_object_attribute_example": "269"
         },
         {
           "business_object_attribute_name": "title",
           "business_object_attribute_description": "歌曲标题",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "Night Sky"
+          "business_object_attribute_example": "晴天"
         },
         {
           "business_object_attribute_name": "artist",
-          "business_object_attribute_description": "歌手名称",
+          "business_object_attribute_description": "歌曲歌手名称",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "Unknown Artist"
+          "business_object_attribute_example": "周杰伦"
         },
         {
           "business_object_attribute_name": "album",
-          "business_object_attribute_description": "专辑名称",
+          "business_object_attribute_description": "所属专辑名称",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "Midnight Collection"
+          "business_object_attribute_example": "叶惠美"
         },
         {
-          "business_object_attribute_name": "is_supported",
-          "business_object_attribute_description": "是否为播放器支持的格式",
+          "business_object_attribute_name": "is_available",
+          "business_object_attribute_description": "文件当前是否可被读取播放",
           "business_object_attribute_type": "bool",
-          "business_object_attribute_example": true
-        },
-        {
-          "business_object_attribute_name": "scan_time",
-          "business_object_attribute_description": "最近扫描时间",
-          "business_object_attribute_type": "string",
-          "business_object_attribute_example": "2026-05-17 09:30:00"
+          "business_object_attribute_example": "true"
         }
       ]
     },
     {
       "business_object_number": "B-002",
-      "business_object_name": "音乐库",
-      "business_object_description": "本地音乐文件扫描后形成的可浏览、可播放的音乐集合",
+      "business_object_name": "播放会话",
+      "business_object_description": "播放器当前的播放上下文，用于记录正在播放的歌曲、播放状态、播放进度和切换行为。",
       "business_object_attributes": [
         {
-          "business_object_attribute_name": "library_id",
-          "business_object_attribute_description": "音乐库唯一标识",
+          "business_object_attribute_name": "playback_session_id",
+          "business_object_attribute_description": "播放会话唯一标识",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "library_local_001"
+          "business_object_attribute_example": "PS-001"
         },
         {
-          "business_object_attribute_name": "library_name",
-          "business_object_attribute_description": "音乐库名称",
+          "business_object_attribute_name": "current_music_id",
+          "business_object_attribute_description": "当前播放的音乐文件标识",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "本地音乐库"
+          "business_object_attribute_example": "M-001"
         },
         {
-          "business_object_attribute_name": "music_count",
-          "business_object_attribute_description": "音乐库中的歌曲数量",
+          "business_object_attribute_name": "play_status",
+          "business_object_attribute_description": "当前播放状态，如播放中、暂停、停止",
+          "business_object_attribute_type": "string",
+          "business_object_attribute_example": "playing"
+        },
+        {
+          "business_object_attribute_name": "progress_seconds",
+          "business_object_attribute_description": "当前播放进度秒数",
           "business_object_attribute_type": "integer",
-          "business_object_attribute_example": 328
+          "business_object_attribute_example": "128"
         },
         {
-          "business_object_attribute_name": "supported_formats",
-          "business_object_attribute_description": "当前支持的音频格式列表",
-          "business_object_attribute_type": "array[string]",
-          "business_object_attribute_example": ["flac", "wav", "mp3"]
+          "business_object_attribute_name": "volume",
+          "business_object_attribute_description": "当前音量值",
+          "business_object_attribute_type": "integer",
+          "business_object_attribute_example": "70"
         },
         {
-          "business_object_attribute_name": "last_scan_time",
-          "business_object_attribute_description": "最近一次扫描本地文件时间",
+          "business_object_attribute_name": "play_source",
+          "business_object_attribute_description": "当前播放来源，如音乐库或歌单",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "2026-05-17 09:30:00"
-        },
-        {
-          "business_object_attribute_name": "scan_status",
-          "business_object_attribute_description": "扫描状态",
-          "business_object_attribute_type": "string",
-          "business_object_attribute_example": "completed"
+          "business_object_attribute_example": "playlist"
         }
       ]
     },
     {
       "business_object_number": "B-003",
-      "business_object_name": "播放列表",
-      "business_object_description": "用于播放控制的曲目集合，可来自音乐库浏览或用户自定义整理",
+      "business_object_name": "歌单",
+      "business_object_description": "用户自定义维护的歌曲集合，用于按个人喜好整理、排序和播放本地音乐。",
       "business_object_attributes": [
         {
           "business_object_attribute_name": "playlist_id",
-          "business_object_attribute_description": "播放列表唯一标识",
+          "business_object_attribute_description": "歌单唯一标识",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "playlist_rock_001"
+          "business_object_attribute_example": "PL-001"
         },
         {
           "business_object_attribute_name": "playlist_name",
-          "business_object_attribute_description": "播放列表名称",
+          "business_object_attribute_description": "歌单名称",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "睡前轻音乐"
+          "business_object_attribute_example": "深夜循环"
         },
         {
-          "business_object_attribute_name": "song_list",
-          "business_object_attribute_description": "播放列表包含的歌曲列表",
+          "business_object_attribute_name": "music_ids",
+          "business_object_attribute_description": "歌单内歌曲标识列表",
           "business_object_attribute_type": "array[string]",
-          "business_object_attribute_example": ["music_20260517_0001", "music_20260517_0002"]
+          "business_object_attribute_example": "[\"M-001\", \"M-003\", \"M-008\"]"
         },
         {
           "business_object_attribute_name": "song_count",
-          "business_object_attribute_description": "播放列表歌曲数量",
+          "business_object_attribute_description": "歌单内歌曲数量",
           "business_object_attribute_type": "integer",
-          "business_object_attribute_example": 24
+          "business_object_attribute_example": "3"
         },
         {
-          "business_object_attribute_name": "created_time",
-          "business_object_attribute_description": "播放列表创建时间",
-          "business_object_attribute_type": "string",
-          "business_object_attribute_example": "2026-05-16 21:00:00"
-        },
-        {
-          "business_object_attribute_name": "updated_time",
-          "business_object_attribute_description": "播放列表最后更新时间",
-          "business_object_attribute_type": "string",
-          "business_object_attribute_example": "2026-05-17 08:10:00"
+          "business_object_attribute_name": "custom_order_enabled",
+          "business_object_attribute_description": "是否启用自定义排序",
+          "business_object_attribute_type": "bool",
+          "business_object_attribute_example": "true"
         }
       ]
     },
     {
       "business_object_number": "B-004",
-      "business_object_name": "播放状态",
-      "business_object_description": "当前播放会话的运行状态，用于记录播放、暂停、进度、音量和当前曲目等信息",
+      "business_object_name": "歌词关联",
+      "business_object_description": "歌曲与本地歌词文件之间的匹配与同步数据，用于歌词显示、偏移调整和关联维护。",
       "business_object_attributes": [
         {
-          "business_object_attribute_name": "session_id",
-          "business_object_attribute_description": "播放会话唯一标识",
+          "business_object_attribute_name": "lyric_link_id",
+          "business_object_attribute_description": "歌词关联唯一标识",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "session_20260517_01"
-        },
-        {
-          "business_object_attribute_name": "current_music_id",
-          "business_object_attribute_description": "当前正在播放的音乐文件标识",
-          "business_object_attribute_type": "string",
-          "business_object_attribute_example": "music_20260517_0001"
-        },
-        {
-          "business_object_attribute_name": "is_playing",
-          "business_object_attribute_description": "是否正在播放",
-          "business_object_attribute_type": "bool",
-          "business_object_attribute_example": true
-        },
-        {
-          "business_object_attribute_name": "play_position",
-          "business_object_attribute_description": "当前播放进度，单位秒",
-          "business_object_attribute_type": "integer",
-          "business_object_attribute_example": 98
-        },
-        {
-          "business_object_attribute_name": "volume",
-          "business_object_attribute_description": "当前音量大小，范围通常为0-100",
-          "business_object_attribute_type": "integer",
-          "business_object_attribute_example": 72
-        },
-        {
-          "business_object_attribute_name": "play_mode",
-          "business_object_attribute_description": "播放模式，如顺序、单曲循环、随机",
-          "business_object_attribute_type": "string",
-          "business_object_attribute_example": "sequential"
-        },
-        {
-          "business_object_attribute_name": "start_time",
-          "business_object_attribute_description": "本次播放开始时间",
-          "business_object_attribute_type": "string",
-          "business_object_attribute_example": "2026-05-17 09:40:12"
-        }
-      ]
-    },
-    {
-      "business_object_number": "B-005",
-      "business_object_name": "歌词信息",
-      "business_object_description": "与本地歌曲匹配得到的歌词内容及其同步显示信息",
-      "business_object_attributes": [
-        {
-          "business_object_attribute_name": "lyric_id",
-          "business_object_attribute_description": "歌词信息唯一标识",
-          "business_object_attribute_type": "string",
-          "business_object_attribute_example": "lyric_20260517_0001"
+          "business_object_attribute_example": "L-001"
         },
         {
           "business_object_attribute_name": "music_id",
-          "business_object_attribute_description": "对应的音乐文件标识",
+          "business_object_attribute_description": "关联的歌曲标识",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "music_20260517_0001"
-        },
-        {
-          "business_object_attribute_name": "lyric_source_type",
-          "business_object_attribute_description": "歌词来源类型，通常为本地歌词文件或内嵌歌词",
-          "business_object_attribute_type": "string",
-          "business_object_attribute_example": "local_file"
+          "business_object_attribute_example": "M-001"
         },
         {
           "business_object_attribute_name": "lyric_file_path",
           "business_object_attribute_description": "本地歌词文件路径",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "D:/Music/Album1/Night_Sky.lrc"
+          "business_object_attribute_example": "D:\\\\Lyrics\\\\晴天.lrc"
         },
         {
-          "business_object_attribute_name": "matched",
-          "business_object_attribute_description": "是否匹配成功",
-          "business_object_attribute_type": "bool",
-          "business_object_attribute_example": true
-        },
-        {
-          "business_object_attribute_name": "lyrics_text",
-          "business_object_attribute_description": "歌词文本内容",
+          "business_object_attribute_name": "match_status",
+          "business_object_attribute_description": "歌词匹配状态，如已匹配、未匹配、手动关联",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "[00:12.00]When the night sky falls"
+          "business_object_attribute_example": "matched"
+        },
+        {
+          "business_object_attribute_name": "sync_offset_ms",
+          "business_object_attribute_description": "歌词同步偏移毫秒值",
+          "business_object_attribute_type": "integer",
+          "business_object_attribute_example": "250"
+        },
+        {
+          "business_object_attribute_name": "display_enabled",
+          "business_object_attribute_description": "播放界面是否启用歌词显示",
+          "business_object_attribute_type": "bool",
+          "business_object_attribute_example": "true"
+        }
+      ]
+    },
+    {
+      "business_object_number": "B-005",
+      "business_object_name": "音效配置",
+      "business_object_description": "用户针对播放器设置的均衡器和音效参数配置，可切换预设并保存个人偏好。",
+      "business_object_attributes": [
+        {
+          "business_object_attribute_name": "effect_config_id",
+          "business_object_attribute_description": "音效配置唯一标识",
+          "business_object_attribute_type": "string",
+          "business_object_attribute_example": "EQ-001"
+        },
+        {
+          "business_object_attribute_name": "preset_name",
+          "business_object_attribute_description": "当前使用的预设名称",
+          "business_object_attribute_type": "string",
+          "business_object_attribute_example": "流行"
+        },
+        {
+          "business_object_attribute_name": "band_settings",
+          "business_object_attribute_description": "均衡器各频段参数集合",
+          "business_object_attribute_type": "object",
+          "business_object_attribute_example": "{\"60Hz\":\"+3\",\"230Hz\":\"+1\",\"910Hz\":\"0\",\"4kHz\":\"+2\",\"14kHz\":\"+4\"}"
+        },
+        {
+          "business_object_attribute_name": "effect_enabled",
+          "business_object_attribute_description": "是否启用音效处理",
+          "business_object_attribute_type": "bool",
+          "business_object_attribute_example": "true"
+        },
+        {
+          "business_object_attribute_name": "user_saved",
+          "business_object_attribute_description": "当前配置是否已保存为用户偏好",
+          "business_object_attribute_type": "bool",
+          "business_object_attribute_example": "true"
         }
       ]
     },
     {
       "business_object_number": "B-006",
-      "business_object_name": "音效设置",
-      "business_object_description": "播放器的均衡器与音效参数配置，用于个性化音质调节",
+      "business_object_name": "睡眠定时任务",
+      "business_object_description": "用户设置的播放定时结束控制数据，用于记录倒计时、结束行为和启用状态。",
       "business_object_attributes": [
         {
-          "business_object_attribute_name": "audio_setting_id",
-          "business_object_attribute_description": "音效设置唯一标识",
+          "business_object_attribute_name": "sleep_timer_id",
+          "business_object_attribute_description": "睡眠定时任务唯一标识",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "audio_setting_default"
+          "business_object_attribute_example": "ST-001"
         },
         {
-          "business_object_attribute_name": "preset_name",
-          "business_object_attribute_description": "均衡器预设名称",
+          "business_object_attribute_name": "remaining_seconds",
+          "business_object_attribute_description": "剩余倒计时秒数",
+          "business_object_attribute_type": "integer",
+          "business_object_attribute_example": "1800"
+        },
+        {
+          "business_object_attribute_name": "target_action",
+          "business_object_attribute_description": "定时结束后执行的行为",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "Bass Boost"
+          "business_object_attribute_example": "close_app"
         },
         {
-          "business_object_attribute_name": "equalizer_bands",
-          "business_object_attribute_description": "各频段增益配置",
-          "business_object_attribute_type": "array[number]",
-          "business_object_attribute_example": [3, 2, 0, -1, 1, 3, 4]
-        },
-        {
-          "business_object_attribute_name": "bass_level",
-          "business_object_attribute_description": "低音增强等级",
-          "business_object_attribute_type": "integer",
-          "business_object_attribute_example": 4
-        },
-        {
-          "business_object_attribute_name": "treble_level",
-          "business_object_attribute_description": "高音增强等级",
-          "business_object_attribute_type": "integer",
-          "business_object_attribute_example": 2
-        },
-        {
-          "business_object_attribute_name": "is_enabled",
-          "business_object_attribute_description": "音效是否启用",
+          "business_object_attribute_name": "is_active",
+          "business_object_attribute_description": "定时任务是否处于启用状态",
           "business_object_attribute_type": "bool",
-          "business_object_attribute_example": true
+          "business_object_attribute_example": "true"
+        },
+        {
+          "business_object_attribute_name": "start_time",
+          "business_object_attribute_description": "定时任务开始时间",
+          "business_object_attribute_type": "datetime",
+          "business_object_attribute_example": "2026-05-20 23:30:00"
         }
       ]
     },
     {
       "business_object_number": "B-007",
-      "business_object_name": "睡眠定时任务",
-      "business_object_description": "用于在指定时间后自动停止播放或关闭播放器的定时控制任务",
+      "business_object_name": "快捷键配置",
+      "business_object_description": "播放器全局快捷键的映射和启用状态配置，用于快速控制播放和切歌。",
       "business_object_attributes": [
         {
-          "business_object_attribute_name": "timer_id",
-          "business_object_attribute_description": "定时任务唯一标识",
+          "business_object_attribute_name": "shortcut_config_id",
+          "business_object_attribute_description": "快捷键配置唯一标识",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "sleep_timer_001"
+          "business_object_attribute_example": "SC-001"
         },
         {
-          "business_object_attribute_name": "mode",
-          "business_object_attribute_description": "定时关闭模式，例如停止播放或退出播放器",
+          "business_object_attribute_name": "play_pause_key",
+          "business_object_attribute_description": "播放暂停快捷键组合",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "stop_playback"
+          "business_object_attribute_example": "Ctrl+Alt+Space"
         },
         {
-          "business_object_attribute_name": "remaining_minutes",
-          "business_object_attribute_description": "剩余倒计时时长，单位分钟",
-          "business_object_attribute_type": "integer",
-          "business_object_attribute_example": 30
-        },
-        {
-          "business_object_attribute_name": "target_time",
-          "business_object_attribute_description": "预计执行时间",
+          "business_object_attribute_name": "previous_key",
+          "business_object_attribute_description": "上一首快捷键组合",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "2026-05-17 23:30:00"
+          "business_object_attribute_example": "Ctrl+Alt+Left"
         },
         {
-          "business_object_attribute_name": "is_active",
-          "business_object_attribute_description": "定时任务是否启用",
+          "business_object_attribute_name": "next_key",
+          "business_object_attribute_description": "下一首快捷键组合",
+          "business_object_attribute_type": "string",
+          "business_object_attribute_example": "Ctrl+Alt+Right"
+        },
+        {
+          "business_object_attribute_name": "enabled",
+          "business_object_attribute_description": "全局快捷键是否启用",
           "business_object_attribute_type": "bool",
-          "business_object_attribute_example": true
+          "business_object_attribute_example": "true"
         }
       ]
     },
     {
       "business_object_number": "B-008",
-      "business_object_name": "全局快捷键配置",
-      "business_object_description": "系统级快捷键映射配置，用于在任意界面执行切歌和播放控制",
+      "business_object_name": "界面偏好设置",
+      "business_object_description": "用户针对播放器界面样式、轻量布局和视觉风格的长期偏好配置。",
       "business_object_attributes": [
         {
-          "business_object_attribute_name": "hotkey_id",
-          "business_object_attribute_description": "快捷键配置唯一标识",
+          "business_object_attribute_name": "ui_preference_id",
+          "business_object_attribute_description": "界面偏好设置唯一标识",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "hotkey_global_001"
-        },
-        {
-          "business_object_attribute_name": "previous_track_key",
-          "business_object_attribute_description": "上一首快捷键",
-          "business_object_attribute_type": "string",
-          "business_object_attribute_example": "Ctrl+Alt+Left"
-        },
-        {
-          "business_object_attribute_name": "next_track_key",
-          "business_object_attribute_description": "下一首快捷键",
-          "business_object_attribute_type": "string",
-          "business_object_attribute_example": "Ctrl+Alt+Right"
-        },
-        {
-          "business_object_attribute_name": "play_pause_key",
-          "business_object_attribute_description": "播放/暂停快捷键",
-          "business_object_attribute_type": "string",
-          "business_object_attribute_example": "Ctrl+Alt+Space"
-        },
-        {
-          "business_object_attribute_name": "is_enabled",
-          "business_object_attribute_description": "全局快捷键是否启用",
-          "business_object_attribute_type": "bool",
-          "business_object_attribute_example": true
-        }
-      ]
-    },
-    {
-      "business_object_number": "B-009",
-      "business_object_name": "播放器界面配置",
-      "business_object_description": "播放器界面的展示与交互配置，体现清爽、轻量化的界面风格",
-      "business_object_attributes": [
-        {
-          "business_object_attribute_name": "ui_config_id",
-          "business_object_attribute_description": "界面配置唯一标识",
-          "business_object_attribute_type": "string",
-          "business_object_attribute_example": "ui_config_default"
+          "business_object_attribute_example": "UI-001"
         },
         {
           "business_object_attribute_name": "theme_style",
           "business_object_attribute_description": "界面主题风格",
           "business_object_attribute_type": "string",
-          "business_object_attribute_example": "minimal"
+          "business_object_attribute_example": "纯净浅色"
         },
         {
-          "business_object_attribute_name": "show_lyrics_panel",
-          "business_object_attribute_description": "是否显示歌词面板",
-          "business_object_attribute_type": "bool",
-          "business_object_attribute_example": true
+          "business_object_attribute_name": "layout_mode",
+          "business_object_attribute_description": "界面布局模式",
+          "business_object_attribute_type": "string",
+          "business_object_attribute_example": "轻量模式"
         },
         {
-          "business_object_attribute_name": "show_playlist_panel",
-          "business_object_attribute_description": "是否显示歌单面板",
+          "business_object_attribute_name": "show_extra_panels",
+          "business_object_attribute_description": "是否显示额外信息面板",
           "business_object_attribute_type": "bool",
-          "business_object_attribute_example": true
+          "business_object_attribute_example": "false"
         },
         {
-          "business_object_attribute_name": "compact_mode",
-          "business_object_attribute_description": "是否启用轻量化紧凑模式",
-          "business_object_attribute_type": "bool",
-          "business_object_attribute_example": true
+          "business_object_attribute_name": "font_scale",
+          "business_object_attribute_description": "界面字体缩放比例",
+          "business_object_attribute_type": "decimal",
+          "business_object_attribute_example": "1.0"
         }
       ]
     }
   ],
   "flows": [
     {
-      "flow_name": "本地音乐扫描与识别流程",
-      "flow_description": "用户选择本地目录后，系统扫描本地音乐文件并识别支持的音频格式，生成可浏览的音乐库",
-      "feature_ids": [3, 4, 5, 18],
+      "flow_name": "本地音乐扫描与导入流程",
+      "flow_description": "本地音乐听众选择本地目录，系统扫描并识别支持的音频文件格式，导入为播放器可用的本地音乐库。",
+      "feature_ids": [
+        3,
+        5
+      ],
       "flow_steps": [
         {
           "step_number": "S-001",
-          "step_name": "选择本地音乐目录",
-          "step_description": "用户选择一个或多个本地文件夹作为音乐扫描来源",
-          "actor_ids": [1],
+          "step_name": "选择扫描目录",
+          "step_description": "本地音乐听众选择需要扫描的本地音乐文件夹或磁盘路径，发起导入操作。",
+          "actor_ids": [
+            1
+          ],
           "step_type": "actorAction",
           "input_business_object_numbers": [],
-          "output_business_object_numbers": ["B-002"],
-          "next_steps": ["S-002"]
+          "output_business_object_numbers": [],
+          "next_steps": [
+            "S-002"
+          ]
         },
         {
           "step_number": "S-002",
           "step_name": "扫描本地文件",
-          "step_description": "系统扫描所选目录中的本地音频文件，不进行联网获取或云端同步",
+          "step_description": "系统遍历所选目录，读取本地音频文件并提取基础元数据。",
           "actor_ids": [],
           "step_type": "systemAction",
-          "input_business_object_numbers": ["B-002"],
-          "output_business_object_numbers": ["B-001"],
-          "next_steps": ["S-003"]
+          "input_business_object_numbers": [],
+          "output_business_object_numbers": [
+            "B-001"
+          ],
+          "next_steps": [
+            "S-003"
+          ]
         },
         {
           "step_number": "S-003",
-          "step_name": "识别音频格式",
-          "step_description": "系统识别扫描到的文件是否为 Flac、WAV、MP3 等支持的格式",
+          "step_name": "判断音频格式是否支持",
+          "step_description": "系统判断扫描到的文件是否属于 Flac、WAV 或 MP3 等受支持的可播放格式。",
           "actor_ids": [],
-          "step_type": "systemAction",
-          "input_business_object_numbers": ["B-001"],
-          "output_business_object_numbers": ["B-001"],
-          "next_steps": ["S-004", "S-005"]
+          "step_type": "judgment",
+          "input_business_object_numbers": [
+            "B-001"
+          ],
+          "output_business_object_numbers": [],
+          "next_steps": [
+            "S-004",
+            "S-005"
+          ]
         },
         {
           "step_number": "S-004",
-          "step_name": "纳入音乐库",
-          "step_description": "将识别成功的音乐文件加入本地音乐库并更新曲目数量",
+          "step_name": "导入可用音乐文件",
+          "step_description": "系统将受支持格式的本地音乐文件纳入播放器音乐库，并保留路径和标签信息。",
           "actor_ids": [],
           "step_type": "systemAction",
-          "input_business_object_numbers": ["B-001"],
-          "output_business_object_numbers": ["B-002"],
-          "next_steps": ["S-006"]
+          "input_business_object_numbers": [
+            "B-001"
+          ],
+          "output_business_object_numbers": [
+            "B-001"
+          ],
+          "next_steps": [
+            "S-006"
+          ]
         },
         {
           "step_number": "S-005",
-          "step_name": "忽略不支持文件",
-          "step_description": "系统跳过不支持格式或损坏的文件，并保留扫描结果状态",
+          "step_name": "跳过不支持文件",
+          "step_description": "系统忽略不受支持或损坏的文件，并继续扫描后续内容。",
           "actor_ids": [],
           "step_type": "systemAction",
-          "input_business_object_numbers": ["B-001"],
-          "output_business_object_numbers": ["B-002"],
-          "next_steps": ["S-006"]
+          "input_business_object_numbers": [
+            "B-001"
+          ],
+          "output_business_object_numbers": [],
+          "next_steps": [
+            "S-006"
+          ]
         },
         {
           "step_number": "S-006",
-          "step_name": "展示音乐库",
-          "step_description": "系统在简洁轻量化界面中展示本地音乐库列表供用户浏览",
-          "actor_ids": [1],
+          "step_name": "完成导入并展示结果",
+          "step_description": "系统生成导入结果，向用户展示可播放音乐条目，供后续浏览和播放。",
+          "actor_ids": [],
           "step_type": "systemAction",
-          "input_business_object_numbers": ["B-002", "B-009"],
-          "output_business_object_numbers": ["B-002"],
+          "input_business_object_numbers": [
+            "B-001"
+          ],
+          "output_business_object_numbers": [
+            "B-001"
+          ],
           "next_steps": []
         }
       ]
     },
     {
       "flow_name": "音乐播放控制流程",
-      "flow_description": "用户从音乐库或播放列表选择歌曲后，进行播放、暂停、进度调节、音量调节以及上一首下一首切换",
-      "feature_ids": [5, 7, 8, 9, 18],
+      "flow_description": "用户从本地音乐库或歌单中选择歌曲，系统创建播放会话并支持播放、暂停、切歌和进度调整。",
+      "feature_ids": [
+        4,
+        5,
+        24,
+        25
+      ],
       "flow_steps": [
         {
           "step_number": "S-001",
-          "step_name": "选择播放曲目",
-          "step_description": "用户从音乐库或播放列表中选择一首歌曲开始播放",
-          "actor_ids": [1],
+          "step_name": "选择待播放歌曲",
+          "step_description": "本地音乐听众从音乐库或歌单中选择一首本地歌曲作为当前播放目标。",
+          "actor_ids": [
+            1
+          ],
           "step_type": "actorAction",
-          "input_business_object_numbers": ["B-002", "B-003"],
-          "output_business_object_numbers": ["B-004"],
-          "next_steps": ["S-002"]
+          "input_business_object_numbers": [
+            "B-001",
+            "B-003"
+          ],
+          "output_business_object_numbers": [],
+          "next_steps": [
+            "S-002"
+          ]
         },
         {
           "step_number": "S-002",
-          "step_name": "加载并开始播放",
-          "step_description": "系统加载本地音频文件并建立播放会话，开始播放当前曲目",
+          "step_name": "创建播放会话",
+          "step_description": "系统加载目标音频文件，校验文件可用性并创建当前播放会话。",
           "actor_ids": [],
           "step_type": "systemAction",
-          "input_business_object_numbers": ["B-001", "B-004"],
-          "output_business_object_numbers": ["B-004"],
-          "next_steps": ["S-003", "S-004", "S-005", "S-006"]
+          "input_business_object_numbers": [
+            "B-001"
+          ],
+          "output_business_object_numbers": [
+            "B-002"
+          ],
+          "next_steps": [
+            "S-003"
+          ]
         },
         {
           "step_number": "S-003",
-          "step_name": "播放或暂停控制",
-          "step_description": "用户在播放过程中执行播放、暂停或继续播放操作",
-          "actor_ids": [1],
+          "step_name": "执行播放或暂停操作",
+          "step_description": "本地音乐听众或快捷键控制者执行播放、暂停等基础播放控制操作。",
+          "actor_ids": [
+            1,
+            6
+          ],
           "step_type": "actorAction",
-          "input_business_object_numbers": ["B-004"],
-          "output_business_object_numbers": ["B-004"],
-          "next_steps": ["S-004", "S-005", "S-006", "S-007"]
+          "input_business_object_numbers": [
+            "B-002"
+          ],
+          "output_business_object_numbers": [
+            "B-002"
+          ],
+          "next_steps": [
+            "S-004"
+          ]
         },
         {
           "step_number": "S-004",
-          "step_name": "切换上一首或下一首",
-          "step_description": "用户通过按钮或快捷键切换当前播放列表中的上一首或下一首歌曲",
-          "actor_ids": [1],
-          "step_type": "actorAction",
-          "input_business_object_numbers": ["B-003", "B-004"],
-          "output_business_object_numbers": ["B-004"],
-          "next_steps": ["S-003", "S-005", "S-006", "S-007"]
+          "step_name": "判断控制类型",
+          "step_description": "系统判断当前操作是继续播放、暂停、切换上一首下一首，还是调整播放进度。",
+          "actor_ids": [],
+          "step_type": "judgment",
+          "input_business_object_numbers": [
+            "B-002",
+            "B-003"
+          ],
+          "output_business_object_numbers": [],
+          "next_steps": [
+            "S-005",
+            "S-006",
+            "S-007"
+          ]
         },
         {
           "step_number": "S-005",
-          "step_name": "调整播放进度",
-          "step_description": "用户拖动进度条调整当前歌曲的播放位置",
-          "actor_ids": [1],
-          "step_type": "actorAction",
-          "input_business_object_numbers": ["B-004"],
-          "output_business_object_numbers": ["B-004"],
-          "next_steps": ["S-003", "S-004", "S-006", "S-007"]
+          "step_name": "更新播放状态",
+          "step_description": "系统根据播放或暂停操作更新当前会话状态并刷新播放界面。",
+          "actor_ids": [],
+          "step_type": "systemAction",
+          "input_business_object_numbers": [
+            "B-002"
+          ],
+          "output_business_object_numbers": [
+            "B-002"
+          ],
+          "next_steps": []
         },
         {
           "step_number": "S-006",
-          "step_name": "调节播放音量",
-          "step_description": "用户通过音量滑块调节基础音量大小",
-          "actor_ids": [1],
-          "step_type": "actorAction",
-          "input_business_object_numbers": ["B-004"],
-          "output_business_object_numbers": ["B-004"],
-          "next_steps": ["S-003", "S-004", "S-005", "S-007"]
+          "step_name": "切换上下首歌曲",
+          "step_description": "系统根据当前播放顺序定位上一首或下一首歌曲，并更新播放会话中的当前歌曲。",
+          "actor_ids": [],
+          "step_type": "systemAction",
+          "input_business_object_numbers": [
+            "B-001",
+            "B-002",
+            "B-003"
+          ],
+          "output_business_object_numbers": [
+            "B-002"
+          ],
+          "next_steps": []
         },
         {
           "step_number": "S-007",
-          "step_name": "同步更新播放状态",
-          "step_description": "系统实时更新当前播放状态、曲目信息、进度和音量显示",
+          "step_name": "调整播放进度",
+          "step_description": "本地音乐听众拖动播放进度条，系统将播放位置跳转到目标时间点。",
+          "actor_ids": [
+            1
+          ],
+          "step_type": "actorAction",
+          "input_business_object_numbers": [
+            "B-002"
+          ],
+          "output_business_object_numbers": [
+            "B-002"
+          ],
+          "next_steps": [
+            "S-008"
+          ]
+        },
+        {
+          "step_number": "S-008",
+          "step_name": "保存新进度状态",
+          "step_description": "系统更新播放会话中的当前进度并继续播放或保持暂停状态。",
           "actor_ids": [],
           "step_type": "systemAction",
-          "input_business_object_numbers": ["B-004"],
-          "output_business_object_numbers": ["B-004"],
+          "input_business_object_numbers": [
+            "B-002"
+          ],
+          "output_business_object_numbers": [
+            "B-002"
+          ],
+          "next_steps": []
+        }
+      ]
+    },
+    {
+      "flow_name": "歌单管理流程",
+      "flow_description": "歌单管理者创建或删除歌单，并对歌单中的歌曲进行添加、移除、排序和自定义维护。",
+      "feature_ids": [
+        7,
+        8,
+        9
+      ],
+      "flow_steps": [
+        {
+          "step_number": "S-001",
+          "step_name": "选择歌单管理操作",
+          "step_description": "歌单管理者进入歌单管理界面，选择新建歌单、删除歌单或编辑歌单内容。",
+          "actor_ids": [
+            2
+          ],
+          "step_type": "actorAction",
+          "input_business_object_numbers": [
+            "B-003",
+            "B-001"
+          ],
+          "output_business_object_numbers": [],
+          "next_steps": [
+            "S-002"
+          ]
+        },
+        {
+          "step_number": "S-002",
+          "step_name": "判断管理类型",
+          "step_description": "系统判断当前是创建新歌单、删除现有歌单，还是维护歌单歌曲内容。",
+          "actor_ids": [],
+          "step_type": "judgment",
+          "input_business_object_numbers": [
+            "B-003"
+          ],
+          "output_business_object_numbers": [],
+          "next_steps": [
+            "S-003",
+            "S-004",
+            "S-005"
+          ]
+        },
+        {
+          "step_number": "S-003",
+          "step_name": "新建歌单",
+          "step_description": "歌单管理者输入歌单名称，创建一个新的自定义歌单。",
+          "actor_ids": [
+            2
+          ],
+          "step_type": "actorAction",
+          "input_business_object_numbers": [],
+          "output_business_object_numbers": [
+            "B-003"
+          ],
+          "next_steps": [
+            "S-008"
+          ]
+        },
+        {
+          "step_number": "S-004",
+          "step_name": "删除歌单",
+          "step_description": "歌单管理者选择不再需要的歌单并确认删除。",
+          "actor_ids": [
+            2
+          ],
+          "step_type": "actorAction",
+          "input_business_object_numbers": [
+            "B-003"
+          ],
+          "output_business_object_numbers": [],
+          "next_steps": [
+            "S-008"
+          ]
+        },
+        {
+          "step_number": "S-005",
+          "step_name": "选择歌单编辑动作",
+          "step_description": "歌单管理者选择对目标歌单执行添加歌曲、移除歌曲或调整排序。",
+          "actor_ids": [
+            2
+          ],
+          "step_type": "actorAction",
+          "input_business_object_numbers": [
+            "B-003",
+            "B-001"
+          ],
+          "output_business_object_numbers": [],
+          "next_steps": [
+            "S-006"
+          ]
+        },
+        {
+          "step_number": "S-006",
+          "step_name": "更新歌单歌曲内容",
+          "step_description": "歌单管理者将歌曲加入歌单、从歌单移除，或调整歌曲顺序以形成自定义内容。",
+          "actor_ids": [
+            2
+          ],
+          "step_type": "actorAction",
+          "input_business_object_numbers": [
+            "B-003",
+            "B-001"
+          ],
+          "output_business_object_numbers": [
+            "B-003"
+          ],
+          "next_steps": [
+            "S-007"
+          ]
+        },
+        {
+          "step_number": "S-007",
+          "step_name": "保存歌单变更",
+          "step_description": "系统保存歌单名称、歌曲列表和排序结果，更新歌单显示。",
+          "actor_ids": [],
+          "step_type": "systemAction",
+          "input_business_object_numbers": [
+            "B-003"
+          ],
+          "output_business_object_numbers": [
+            "B-003"
+          ],
+          "next_steps": []
+        },
+        {
+          "step_number": "S-008",
+          "step_name": "提交歌单管理结果",
+          "step_description": "系统执行歌单创建或删除操作，并刷新歌单列表。",
+          "actor_ids": [],
+          "step_type": "systemAction",
+          "input_business_object_numbers": [
+            "B-003"
+          ],
+          "output_business_object_numbers": [
+            "B-003"
+          ],
           "next_steps": []
         }
       ]
     },
     {
       "flow_name": "本地歌词匹配与显示流程",
-      "flow_description": "系统根据当前播放歌曲自动匹配本地歌词文件并在界面中同步显示歌词内容",
-      "feature_ids": [7, 11, 18],
+      "flow_description": "歌词匹配者为本地歌曲自动匹配歌词文件，并在播放界面显示歌词、调整同步偏移和维护关联结果。",
+      "feature_ids": [
+        11,
+        12,
+        13
+      ],
       "flow_steps": [
         {
           "step_number": "S-001",
-          "step_name": "播放歌曲触发歌词匹配",
-          "step_description": "当歌曲开始播放或切换曲目时，系统自动触发歌词匹配流程",
-          "actor_ids": [],
-          "step_type": "systemAction",
-          "input_business_object_numbers": ["B-004", "B-001"],
-          "output_business_object_numbers": ["B-005"],
-          "next_steps": ["S-002"]
+          "step_name": "选择目标歌曲进行歌词处理",
+          "step_description": "歌词匹配者或本地音乐听众选择需要显示歌词的本地歌曲。",
+          "actor_ids": [
+            4,
+            1
+          ],
+          "step_type": "actorAction",
+          "input_business_object_numbers": [
+            "B-001"
+          ],
+          "output_business_object_numbers": [],
+          "next_steps": [
+            "S-002"
+          ]
         },
         {
           "step_number": "S-002",
-          "step_name": "查找本地歌词文件",
-          "step_description": "系统在本地目录中查找与当前歌曲同名或关联的歌词文件",
+          "step_name": "自动匹配本地歌词",
+          "step_description": "系统根据歌曲标题、歌手、文件名或同目录文件自动查找并匹配本地歌词文件。",
           "actor_ids": [],
           "step_type": "systemAction",
-          "input_business_object_numbers": ["B-001"],
-          "output_business_object_numbers": ["B-005"],
-          "next_steps": ["S-003", "S-004"]
+          "input_business_object_numbers": [
+            "B-001"
+          ],
+          "output_business_object_numbers": [
+            "B-004"
+          ],
+          "next_steps": [
+            "S-003"
+          ]
         },
         {
           "step_number": "S-003",
-          "step_name": "匹配成功并解析歌词",
-          "step_description": "系统解析匹配到的歌词文件内容并生成可同步展示的歌词信息",
+          "step_name": "判断歌词是否匹配成功",
+          "step_description": "系统判断是否已找到可用歌词关联结果。",
           "actor_ids": [],
-          "step_type": "systemAction",
-          "input_business_object_numbers": ["B-005"],
-          "output_business_object_numbers": ["B-005"],
-          "next_steps": ["S-005"]
+          "step_type": "judgment",
+          "input_business_object_numbers": [
+            "B-004"
+          ],
+          "output_business_object_numbers": [],
+          "next_steps": [
+            "S-004",
+            "S-006"
+          ]
         },
         {
           "step_number": "S-004",
-          "step_name": "匹配失败并标记无歌词",
-          "step_description": "系统在未找到歌词文件时标记当前歌曲无可用歌词",
+          "step_name": "显示歌词内容",
+          "step_description": "系统在播放界面按当前进度显示歌词内容，并建立歌曲与歌词的关联。",
           "actor_ids": [],
           "step_type": "systemAction",
-          "input_business_object_numbers": ["B-005"],
-          "output_business_object_numbers": ["B-005"],
-          "next_steps": ["S-005"]
+          "input_business_object_numbers": [
+            "B-002",
+            "B-004"
+          ],
+          "output_business_object_numbers": [
+            "B-004"
+          ],
+          "next_steps": [
+            "S-005"
+          ]
         },
         {
           "step_number": "S-005",
-          "step_name": "显示并同步歌词",
-          "step_description": "系统在清爽界面中显示歌词内容，并随播放进度同步高亮当前行",
-          "actor_ids": [1],
-          "step_type": "systemAction",
-          "input_business_object_numbers": ["B-005", "B-009"],
-          "output_business_object_numbers": ["B-005"],
-          "next_steps": []
-        }
-      ]
-    },
-    {
-      "flow_name": "音效均衡器设置流程",
-      "flow_description": "用户调整均衡器和音效参数以自定义本地音乐播放效果",
-      "feature_ids": [12, 18],
-      "flow_steps": [
-        {
-          "step_number": "S-001",
-          "step_name": "打开音效设置面板",
-          "step_description": "用户从播放器界面打开均衡器或音效设置面板",
-          "actor_ids": [1],
+          "step_name": "调整歌词同步偏移",
+          "step_description": "歌词匹配者根据听感手动调整歌词显示的同步时间偏移。",
+          "actor_ids": [
+            4
+          ],
           "step_type": "actorAction",
-          "input_business_object_numbers": ["B-009"],
-          "output_business_object_numbers": ["B-006"],
-          "next_steps": ["S-002"]
-        },
-        {
-          "step_number": "S-002",
-          "step_name": "加载当前音效配置",
-          "step_description": "系统读取并展示当前启用的均衡器预设和频段参数",
-          "actor_ids": [],
-          "step_type": "systemAction",
-          "input_business_object_numbers": ["B-006"],
-          "output_business_object_numbers": ["B-006"],
-          "next_steps": ["S-003", "S-004", "S-005"]
-        },
-        {
-          "step_number": "S-003",
-          "step_name": "选择或切换预设",
-          "step_description": "用户选择适合的均衡器预设方案",
-          "actor_ids": [1],
-          "step_type": "actorAction",
-          "input_business_object_numbers": ["B-006"],
-          "output_business_object_numbers": ["B-006"],
-          "next_steps": ["S-004", "S-005"]
-        },
-        {
-          "step_number": "S-004",
-          "step_name": "调整频段参数",
-          "step_description": "用户手动调整各频段增益、低音和高音等音效参数",
-          "actor_ids": [1],
-          "step_type": "actorAction",
-          "input_business_object_numbers": ["B-006"],
-          "output_business_object_numbers": ["B-006"],
-          "next_steps": ["S-003", "S-005"]
-        },
-        {
-          "step_number": "S-005",
-          "step_name": "应用音效设置",
-          "step_description": "系统将当前音效配置应用到正在播放的音乐",
-          "actor_ids": [],
-          "step_type": "systemAction",
-          "input_business_object_numbers": ["B-006", "B-004"],
-          "output_business_object_numbers": ["B-006", "B-004"],
-          "next_steps": []
-        }
-      ]
-    },
-    {
-      "flow_name": "歌单自定义管理流程",
-      "flow_description": "用户创建、编辑、删除自定义歌单，并将本地歌曲加入或移出歌单",
-      "feature_ids": [5, 14, 18],
-      "flow_steps": [
-        {
-          "step_number": "S-001",
-          "step_name": "新建歌单",
-          "step_description": "用户创建一个新的自定义歌单",
-          "actor_ids": [1],
-          "step_type": "actorAction",
-          "input_business_object_numbers": [],
-          "output_business_object_numbers": ["B-003"],
-          "next_steps": ["S-002"]
-        },
-        {
-          "step_number": "S-002",
-          "step_name": "初始化歌单信息",
-          "step_description": "系统生成歌单标识并创建空歌单",
-          "actor_ids": [],
-          "step_type": "systemAction",
-          "input_business_object_numbers": ["B-003"],
-          "output_business_object_numbers": ["B-003"],
-          "next_steps": ["S-003", "S-004", "S-005", "S-006"]
-        },
-        {
-          "step_number": "S-003",
-          "step_name": "编辑歌单名称",
-          "step_description": "用户修改歌单名称以便分类管理",
-          "actor_ids": [1],
-          "step_type": "actorAction",
-          "input_business_object_numbers": ["B-003"],
-          "output_business_object_numbers": ["B-003"],
-          "next_steps": ["S-004", "S-005", "S-006"]
-        },
-        {
-          "step_number": "S-004",
-          "step_name": "加入本地歌曲",
-          "step_description": "用户从音乐库中选择歌曲加入当前歌单",
-          "actor_ids": [1],
-          "step_type": "actorAction",
-          "input_business_object_numbers": ["B-002", "B-003"],
-          "output_business_object_numbers": ["B-003"],
-          "next_steps": ["S-003", "S-005", "S-006"]
-        },
-        {
-          "step_number": "S-005",
-          "step_name": "移除歌单歌曲",
-          "step_description": "用户将已加入的歌曲从歌单中移除",
-          "actor_ids": [1],
-          "step_type": "actorAction",
-          "input_business_object_numbers": ["B-003"],
-          "output_business_object_numbers": ["B-003"],
-          "next_steps": ["S-003", "S-004", "S-006"]
+          "input_business_object_numbers": [
+            "B-004",
+            "B-002"
+          ],
+          "output_business_object_numbers": [
+            "B-004"
+          ],
+          "next_steps": [
+            "S-007"
+          ]
         },
         {
           "step_number": "S-006",
-          "step_name": "删除歌单",
-          "step_description": "用户删除不再需要的自定义歌单",
-          "actor_ids": [1],
+          "step_name": "维护歌词关联结果",
+          "step_description": "歌词匹配者在自动匹配失败或结果不准确时，手动管理歌词与歌曲的关联关系。",
+          "actor_ids": [
+            4
+          ],
           "step_type": "actorAction",
-          "input_business_object_numbers": ["B-003"],
+          "input_business_object_numbers": [
+            "B-001",
+            "B-004"
+          ],
+          "output_business_object_numbers": [
+            "B-004"
+          ],
+          "next_steps": [
+            "S-007"
+          ]
+        },
+        {
+          "step_number": "S-007",
+          "step_name": "保存歌词关联配置",
+          "step_description": "系统保存歌词文件路径、匹配状态和同步偏移结果，供后续播放直接使用。",
+          "actor_ids": [],
+          "step_type": "systemAction",
+          "input_business_object_numbers": [
+            "B-004"
+          ],
+          "output_business_object_numbers": [
+            "B-004"
+          ],
+          "next_steps": []
+        }
+      ]
+    },
+    {
+      "flow_name": "音效均衡器配置流程",
+      "flow_description": "音效调节者切换预设音效、调整均衡器频段和配置音效参数，并保存个人音效偏好。",
+      "feature_ids": [
+        15,
+        16,
+        17
+      ],
+      "flow_steps": [
+        {
+          "step_number": "S-001",
+          "step_name": "进入音效设置",
+          "step_description": "音效调节者打开播放器音效设置界面，查看当前音效配置。",
+          "actor_ids": [
+            3
+          ],
+          "step_type": "actorAction",
+          "input_business_object_numbers": [
+            "B-005"
+          ],
           "output_business_object_numbers": [],
+          "next_steps": [
+            "S-002"
+          ]
+        },
+        {
+          "step_number": "S-002",
+          "step_name": "选择预设或自定义调节",
+          "step_description": "音效调节者选择系统预设音效方案，或进入自定义均衡器与参数设置。",
+          "actor_ids": [
+            3
+          ],
+          "step_type": "actorAction",
+          "input_business_object_numbers": [
+            "B-005"
+          ],
+          "output_business_object_numbers": [
+            "B-005"
+          ],
+          "next_steps": [
+            "S-003"
+          ]
+        },
+        {
+          "step_number": "S-003",
+          "step_name": "判断音效调整方式",
+          "step_description": "系统判断当前调整方式是直接切换预设，还是手动编辑均衡器频段与音效参数。",
+          "actor_ids": [],
+          "step_type": "judgment",
+          "input_business_object_numbers": [
+            "B-005"
+          ],
+          "output_business_object_numbers": [],
+          "next_steps": [
+            "S-004",
+            "S-005"
+          ]
+        },
+        {
+          "step_number": "S-004",
+          "step_name": "应用预设音效",
+          "step_description": "系统根据用户选择应用对应的预设音效方案。",
+          "actor_ids": [],
+          "step_type": "systemAction",
+          "input_business_object_numbers": [
+            "B-005"
+          ],
+          "output_business_object_numbers": [
+            "B-005"
+          ],
+          "next_steps": [
+            "S-006"
+          ]
+        },
+        {
+          "step_number": "S-005",
+          "step_name": "调整均衡器和参数",
+          "step_description": "音效调节者手动修改各频段增益和其他音效参数，以优化听感。",
+          "actor_ids": [
+            3
+          ],
+          "step_type": "actorAction",
+          "input_business_object_numbers": [
+            "B-005"
+          ],
+          "output_business_object_numbers": [
+            "B-005"
+          ],
+          "next_steps": [
+            "S-006"
+          ]
+        },
+        {
+          "step_number": "S-006",
+          "step_name": "保存音效偏好",
+          "step_description": "系统保存当前音效配置，供后续播放持续使用。",
+          "actor_ids": [],
+          "step_type": "systemAction",
+          "input_business_object_numbers": [
+            "B-005"
+          ],
+          "output_business_object_numbers": [
+            "B-005"
+          ],
           "next_steps": []
         }
       ]
     },
     {
       "flow_name": "睡眠定时关闭流程",
-      "flow_description": "用户设置睡眠定时任务，系统在指定时间后自动停止播放或关闭播放器",
-      "feature_ids": [15, 7],
+      "flow_description": "睡眠定时设置者设置定时关闭时长和播放结束行为，可查看倒计时并在需要时取消定时。",
+      "feature_ids": [
+        19,
+        20,
+        21
+      ],
       "flow_steps": [
         {
           "step_number": "S-001",
-          "step_name": "设置定时时长或结束时间",
-          "step_description": "用户输入睡眠定时的时长或目标结束时间",
-          "actor_ids": [1],
+          "step_name": "设置定时关闭参数",
+          "step_description": "睡眠定时设置者输入定时时长，并选择到时后的处理方式，如停止播放或关闭程序。",
+          "actor_ids": [
+            5
+          ],
           "step_type": "actorAction",
-          "input_business_object_numbers": [],
-          "output_business_object_numbers": ["B-007"],
-          "next_steps": ["S-002"]
+          "input_business_object_numbers": [
+            "B-006"
+          ],
+          "output_business_object_numbers": [
+            "B-006"
+          ],
+          "next_steps": [
+            "S-002"
+          ]
         },
         {
           "step_number": "S-002",
-          "step_name": "创建并启用定时任务",
-          "step_description": "系统根据用户设置生成睡眠定时任务并开始倒计时",
+          "step_name": "启动睡眠定时任务",
+          "step_description": "系统创建并启动倒计时任务，记录剩余时间和目标行为。",
           "actor_ids": [],
           "step_type": "systemAction",
-          "input_business_object_numbers": ["B-007"],
-          "output_business_object_numbers": ["B-007"],
-          "next_steps": ["S-003", "S-004"]
+          "input_business_object_numbers": [
+            "B-006"
+          ],
+          "output_business_object_numbers": [
+            "B-006"
+          ],
+          "next_steps": [
+            "S-003"
+          ]
         },
         {
           "step_number": "S-003",
-          "step_name": "查看剩余时间",
-          "step_description": "用户查看当前定时任务的剩余倒计时",
-          "actor_ids": [1],
+          "step_name": "查看或取消定时",
+          "step_description": "睡眠定时设置者查看剩余倒计时，并可按需取消当前定时任务。",
+          "actor_ids": [
+            5
+          ],
           "step_type": "actorAction",
-          "input_business_object_numbers": ["B-007"],
-          "output_business_object_numbers": ["B-007"],
-          "next_steps": ["S-004"]
+          "input_business_object_numbers": [
+            "B-006"
+          ],
+          "output_business_object_numbers": [],
+          "next_steps": [
+            "S-004"
+          ]
         },
         {
           "step_number": "S-004",
-          "step_name": "到时自动停止播放或退出",
-          "step_description": "系统在定时结束后自动停止当前播放或关闭播放器",
+          "step_name": "判断定时任务状态",
+          "step_description": "系统判断当前定时任务是被用户取消，还是已自然倒计时结束。",
           "actor_ids": [],
-          "step_type": "systemAction",
-          "input_business_object_numbers": ["B-007", "B-004"],
-          "output_business_object_numbers": ["B-004", "B-007"],
-          "next_steps": []
-        }
-      ]
-    },
-    {
-      "flow_name": "全局快捷键切歌流程",
-      "flow_description": "用户在系统任意界面通过全局快捷键控制播放器切歌、播放和暂停",
-      "feature_ids": [7, 8, 17, 18],
-      "flow_steps": [
-        {
-          "step_number": "S-001",
-          "step_name": "配置全局快捷键",
-          "step_description": "用户在设置界面定义上一首、下一首和播放暂停快捷键",
-          "actor_ids": [1],
-          "step_type": "actorAction",
-          "input_business_object_numbers": ["B-008"],
-          "output_business_object_numbers": ["B-008"],
-          "next_steps": ["S-002"]
-        },
-        {
-          "step_number": "S-002",
-          "step_name": "注册系统全局监听",
-          "step_description": "系统将快捷键配置注册到操作系统，确保任意界面可响应",
-          "actor_ids": [],
-          "step_type": "systemAction",
-          "input_business_object_numbers": ["B-008"],
-          "output_business_object_numbers": ["B-008"],
-          "next_steps": ["S-003", "S-004", "S-005"]
-        },
-        {
-          "step_number": "S-003",
-          "step_name": "触发上一首快捷键",
-          "step_description": "用户按下上一首全局快捷键",
-          "actor_ids": [1],
-          "step_type": "actorAction",
-          "input_business_object_numbers": ["B-008", "B-004", "B-003"],
-          "output_business_object_numbers": ["B-004"],
-          "next_steps": ["S-006"]
-        },
-        {
-          "step_number": "S-004",
-          "step_name": "触发下一首快捷键",
-          "step_description": "用户按下下一首全局快捷键",
-          "actor_ids": [1],
-          "step_type": "actorAction",
-          "input_business_object_numbers": ["B-008", "B-004", "B-003"],
-          "output_business_object_numbers": ["B-004"],
-          "next_steps": ["S-006"]
+          "step_type": "judgment",
+          "input_business_object_numbers": [
+            "B-006",
+            "B-002"
+          ],
+          "output_business_object_numbers": [],
+          "next_steps": [
+            "S-005",
+            "S-006"
+          ]
         },
         {
           "step_number": "S-005",
-          "step_name": "触发播放暂停快捷键",
-          "step_description": "用户按下播放或暂停全局快捷键",
-          "actor_ids": [1],
-          "step_type": "actorAction",
-          "input_business_object_numbers": ["B-008", "B-004"],
-          "output_business_object_numbers": ["B-004"],
-          "next_steps": ["S-006"]
+          "step_name": "取消定时任务",
+          "step_description": "系统停止倒计时并将睡眠定时任务标记为未启用状态。",
+          "actor_ids": [],
+          "step_type": "systemAction",
+          "input_business_object_numbers": [
+            "B-006"
+          ],
+          "output_business_object_numbers": [
+            "B-006"
+          ],
+          "next_steps": []
         },
         {
           "step_number": "S-006",
-          "step_name": "更新播放状态并反馈",
-          "step_description": "系统根据快捷键指令切换播放状态并在界面中刷新当前曲目",
+          "step_name": "执行定时结束行为",
+          "step_description": "系统在倒计时结束后按设定执行停止播放或关闭程序等处理动作。",
           "actor_ids": [],
           "step_type": "systemAction",
-          "input_business_object_numbers": ["B-004"],
-          "output_business_object_numbers": ["B-004"],
+          "input_business_object_numbers": [
+            "B-006",
+            "B-002"
+          ],
+          "output_business_object_numbers": [
+            "B-006",
+            "B-002"
+          ],
           "next_steps": []
         }
       ]
     },
     {
-      "flow_name": "播放器界面轻量化展示流程",
-      "flow_description": "系统以清爽、纯净、轻量化的方式展示播放器主界面、音乐库、播放列表、歌词和控制区域",
-      "feature_ids": [18, 5, 7, 11, 14, 12, 15, 17],
+      "flow_name": "全局快捷键控制流程",
+      "flow_description": "快捷键控制者配置全局快捷键，并通过快捷键快速执行播放、暂停和切歌等控制动作。",
+      "feature_ids": [
+        23,
+        24,
+        25
+      ],
       "flow_steps": [
         {
           "step_number": "S-001",
-          "step_name": "打开播放器主界面",
-          "step_description": "用户启动播放器后进入主界面",
-          "actor_ids": [1],
+          "step_name": "设置快捷键映射",
+          "step_description": "快捷键控制者为播放暂停、上一首和下一首操作设置全局快捷键组合。",
+          "actor_ids": [
+            6
+          ],
           "step_type": "actorAction",
-          "input_business_object_numbers": [],
-          "output_business_object_numbers": ["B-009"],
-          "next_steps": ["S-002"]
+          "input_business_object_numbers": [
+            "B-007"
+          ],
+          "output_business_object_numbers": [
+            "B-007"
+          ],
+          "next_steps": [
+            "S-002"
+          ]
         },
         {
           "step_number": "S-002",
-          "step_name": "加载界面布局与模块",
-          "step_description": "系统按轻量化配置加载音乐库、播放列表、歌词和控制模块",
+          "step_name": "注册全局快捷键",
+          "step_description": "系统保存快捷键配置并向操作系统注册全局监听。",
           "actor_ids": [],
           "step_type": "systemAction",
-          "input_business_object_numbers": ["B-009", "B-002", "B-003", "B-005", "B-004"],
-          "output_business_object_numbers": ["B-009"],
-          "next_steps": ["S-003", "S-004"]
+          "input_business_object_numbers": [
+            "B-007"
+          ],
+          "output_business_object_numbers": [
+            "B-007"
+          ],
+          "next_steps": [
+            "S-003"
+          ]
         },
         {
           "step_number": "S-003",
-          "step_name": "浏览并选择功能区域",
-          "step_description": "用户在清爽界面中切换音乐库、歌单、歌词或音效等功能区域",
-          "actor_ids": [1],
+          "step_name": "触发快捷键操作",
+          "step_description": "快捷键控制者在任意界面下按下已配置快捷键，发起播放控制请求。",
+          "actor_ids": [
+            6
+          ],
           "step_type": "actorAction",
-          "input_business_object_numbers": ["B-009"],
-          "output_business_object_numbers": ["B-009"],
-          "next_steps": ["S-004"]
+          "input_business_object_numbers": [
+            "B-007",
+            "B-002"
+          ],
+          "output_business_object_numbers": [],
+          "next_steps": [
+            "S-004"
+          ]
         },
         {
           "step_number": "S-004",
-          "step_name": "保持简洁展示状态",
-          "step_description": "系统持续保持低干扰、少冗余的展示状态，确保界面轻量化体验",
+          "step_name": "识别快捷键对应动作",
+          "step_description": "系统识别触发的快捷键对应的是播放暂停、上一首还是下一首等操作。",
+          "actor_ids": [],
+          "step_type": "judgment",
+          "input_business_object_numbers": [
+            "B-007",
+            "B-002"
+          ],
+          "output_business_object_numbers": [],
+          "next_steps": [
+            "S-005",
+            "S-006"
+          ]
+        },
+        {
+          "step_number": "S-005",
+          "step_name": "更新播放状态",
+          "step_description": "系统执行播放或暂停操作并更新当前播放会话状态。",
           "actor_ids": [],
           "step_type": "systemAction",
-          "input_business_object_numbers": ["B-009"],
-          "output_business_object_numbers": ["B-009"],
+          "input_business_object_numbers": [
+            "B-002"
+          ],
+          "output_business_object_numbers": [
+            "B-002"
+          ],
+          "next_steps": []
+        },
+        {
+          "step_number": "S-006",
+          "step_name": "执行切歌操作",
+          "step_description": "系统根据快捷键请求切换上一首或下一首歌曲，并更新当前播放会话。",
+          "actor_ids": [],
+          "step_type": "systemAction",
+          "input_business_object_numbers": [
+            "B-002",
+            "B-003",
+            "B-001"
+          ],
+          "output_business_object_numbers": [
+            "B-002"
+          ],
+          "next_steps": []
+        }
+      ]
+    },
+    {
+      "flow_name": "界面偏好设置流程",
+      "flow_description": "界面偏好设置者调整播放器的显示样式、轻量化布局和视觉风格，以保持清爽纯净的使用体验。",
+      "feature_ids": [
+        27,
+        28,
+        29
+      ],
+      "flow_steps": [
+        {
+          "step_number": "S-001",
+          "step_name": "进入界面设置",
+          "step_description": "界面偏好设置者打开播放器设置并进入界面外观配置区域。",
+          "actor_ids": [
+            7
+          ],
+          "step_type": "actorAction",
+          "input_business_object_numbers": [
+            "B-008"
+          ],
+          "output_business_object_numbers": [],
+          "next_steps": [
+            "S-002"
+          ]
+        },
+        {
+          "step_number": "S-002",
+          "step_name": "调整显示样式和布局",
+          "step_description": "界面偏好设置者选择界面显示样式、切换轻量化布局，并配置视觉风格偏好。",
+          "actor_ids": [
+            7
+          ],
+          "step_type": "actorAction",
+          "input_business_object_numbers": [
+            "B-008"
+          ],
+          "output_business_object_numbers": [
+            "B-008"
+          ],
+          "next_steps": [
+            "S-003"
+          ]
+        },
+        {
+          "step_number": "S-003",
+          "step_name": "应用界面偏好",
+          "step_description": "系统立即应用新的界面风格与布局设置，并更新播放器展示效果。",
+          "actor_ids": [],
+          "step_type": "systemAction",
+          "input_business_object_numbers": [
+            "B-008"
+          ],
+          "output_business_object_numbers": [
+            "B-008"
+          ],
+          "next_steps": [
+            "S-004"
+          ]
+        },
+        {
+          "step_number": "S-004",
+          "step_name": "保存界面配置",
+          "step_description": "系统保存界面偏好设置，供后续启动播放器时自动生效。",
+          "actor_ids": [],
+          "step_type": "systemAction",
+          "input_business_object_numbers": [
+            "B-008"
+          ],
+          "output_business_object_numbers": [
+            "B-008"
+          ],
           "next_steps": []
         }
       ]

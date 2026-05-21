@@ -46,33 +46,37 @@ As a <actor>, I want to <feature>, So that <获得什么价值>
 轻量化桌面悬浮便签 + 待办整合软件，可新建多个独立便签贴在桌面任意位置，支持文字编辑、颜色分类、字体调整；自带待办清单功能，可设置任务截止时间、已完成标记、置顶重要事项，支持开机常驻、透明化背景、一键隐藏所有便签，适合学生、上班族记录临时灵感、日程、琐事。
 ### 参与者（用户）
 {
-    "actor_name": "普通用户",
-    "actor_description": "使用本软件进行便签记录、待办任务管理的学生、上班族等个人使用者"
+    "actor_name": "便签记录者",
+    "actor_description": "便签记录者是指在需要快速记录临时灵感、课程内容、会议要点、日程安排或生活琐事的场景下，与桌面便签功能发生交互，并可执行新建便签、编辑文字内容、查看便签和删除便签等操作的用户角色。"
 }
 ### 系统功能（feature）
 {
     "feature_name": "新建独立便签",
-    "feature_description": "支持创建多个相互独立的悬浮便签，可拖动至桌面任意位置摆放",
+    "feature_description": "支持用户创建多个相互独立的桌面便签，用于记录临时灵感、课程内容、会议要点、日程安排或生活琐事。",
 }
 
 ## 示例输出
 {
     "scenarios": [
         {
-            "scenario_name": "快速创建独立悬浮便签记录临时信息",
-            "scenario_content": "As a 普通用户, I want to 新建一个独立的悬浮便签, So that 我可以快速记录临时想到的零散信息，且不会与已有便签的内容相互干扰"
+            "scenario_name": "快速创建临时灵感便签",
+            "scenario_content": "As a 便签记录者, I want to 新建独立便签, So that 我可以快速记录临时灵感并将其保留在桌面上随时查看"
         },
         {
-            "scenario_name": "创建多个独立便签并拖动至桌面不同位置分类摆放",
-            "scenario_content": "As a 普通用户, I want to 新建多个相互独立的悬浮便签并将它们拖动至桌面任意位置, So that 我可以将不同类型的信息分开摆放，方便同时查看和分类管理"
+            "scenario_name": "创建课程内容便签",
+            "scenario_content": "As a 便签记录者, I want to 新建独立便签, So that 我可以在学习过程中单独记录课程重点并避免与其他内容混淆"
         },
         {
-            "scenario_name": "为不同任务分别创建独立悬浮便签",
-            "scenario_content": "As a 普通用户, I want to 为每个不同的待办任务分别新建独立的悬浮便签, So that 我可以清晰区分各个任务的相关记录，避免不同任务的信息混淆在一起"
+            "scenario_name": "创建会议要点便签",
+            "scenario_content": "As a 便签记录者, I want to 新建独立便签, So that 我可以在会议过程中快速记录关键事项并便于后续整理"
         },
         {
-            "scenario_name": "在桌面显眼位置创建独立便签用于重要事项提醒",
-            "scenario_content": "As a 普通用户, I want to 新建独立的悬浮便签并将其拖动至桌面显眼的指定位置, So that 我可以随时看到重要事项的提醒，有效防止遗漏关键事务"
+            "scenario_name": "创建日程安排便签",
+            "scenario_content": "As a 便签记录者, I want to 新建独立便签, So that 我可以把重要日程放在桌面上提醒自己及时处理"
+        },
+        {
+            "scenario_name": "创建生活琐事便签",
+            "scenario_content": "As a 便签记录者, I want to 新建独立便签, So that 我可以把零散生活事项独立记录并减少遗忘"
         }
     ]
 }

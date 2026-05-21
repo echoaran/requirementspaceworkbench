@@ -52,14 +52,14 @@ if __name__ == "__main__":
 
     test_actor = ActorNode(
         actorId=1,
-        actorName="普通用户",
-        actorDescription="使用系统进行日常操作的注册用户，拥有基本的浏览、查询和操作权限"
+        actorName="本地音乐听众",
+        actorDescription="本地音乐听众是指在需要播放和聆听电脑本地音乐文件的场景下，与音乐播放器发生交互，并可执行导入或扫描本地音乐、播放暂停、切换上一首下一首、调整播放进度、管理播放列表和选择音频格式进行播放等操作的用户角色。"
     )
 
     test_feature = FeatureNode(
         featureId=1,
-        featureName="本地文件读取",
-        featureDescription="仅从电脑本地读取音乐文件，不依赖网络资源或在线音乐服务",
+        featureName="扫描与导入本地音乐",
+        featureDescription="支持从电脑本地读取、扫描和导入音乐文件，作为播放器的媒体来源。",
         actorIds=[1],
         childrenIds=[],  # 无子功能，为叶子节点
     )
@@ -73,23 +73,31 @@ if __name__ == "__main__":
 
     scenarios_generator_result = """
 {
-  "scenarios": [
-    {
-      "scenario_name": "从本地文件夹导入音乐文件",
-      "scenario_content": "As a 普通用户, I want to 直接从电脑本地文件夹读取音乐文件, So that 我可以在不联网的情况下快速导入自己的歌曲并开始播放"
-    },
-    {
-      "scenario_name": "扫描本地音乐库中的无损和常见音频格式",
-      "scenario_content": "As a 普通用户, I want to 从本地读取 Flac、WAV 和 MP3 等音乐文件, So that 我可以统一管理并播放电脑中保存的不同格式音乐"
-    },
-    {
-      "scenario_name": "仅使用本地音乐资源构建播放器曲库",
-      "scenario_content": "As a 普通用户, I want to 让播放器只读取电脑本地音乐文件而不依赖在线资源, So that 我可以在离线环境下稳定使用播放器并避免网络内容干扰"
-    },
-    {
-      "scenario_name": "离线浏览本地音乐列表并选择播放",
-      "scenario_content": "As a 普通用户, I want to 浏览本地读取到的音乐列表并直接选择歌曲播放, So that 我可以快速找到想听的音乐而无需登录或搜索在线曲库"
-    }
-  ]
+    "scenarios": [
+        {
+            "scenario_name": "扫描本地音乐目录",
+            "scenario_content": "As a 本地音乐听众, I want to 扫描电脑中的本地音乐目录, So that 我可以一次性将所有本地音乐文件加入播放器作为播放来源"
+        },
+        {
+            "scenario_name": "导入指定本地音乐文件",
+            "scenario_content": "As a 本地音乐听众, I want to 从本地磁盘中手动选择并导入指定音乐文件或文件夹, So that 我可以精确控制哪些音乐加入播放器库"
+        },
+        {
+            "scenario_name": "支持多种无损与常见格式导入",
+            "scenario_content": "As a 本地音乐听众, I want to 在扫描与导入时支持 Flac/WAV/MP3 等格式, So that 我可以无缝播放自己本地收藏的无损与有损音乐"
+        },
+        {
+            "scenario_name": "读取并展示本地音乐信息",
+            "scenario_content": "As a 本地音乐听众, I want to 在扫描与导入时自动读取歌曲名称、专辑、歌手等标签信息, So that 我可以在播放器中清晰地识别和管理已导入的歌曲"
+        },
+        {
+            "scenario_name": "建立纯本地音乐媒体库",
+            "scenario_content": "As a 本地音乐听众, I want to 将扫描或导入的音乐文件构建成本地媒体库且不依赖网络, So that 我可以在一个纯本地、无广告、无账号登录的环境中播放音乐"
+        },
+        {
+            "scenario_name": "更新本地音乐库",
+            "scenario_content": "As a 本地音乐听众, I want to 重新扫描或增量扫描本地音乐目录, So that 我在新增或删除本地音乐文件后可以快速更新播放器中的歌曲列表"
+        }
+    ]
 }
 """
