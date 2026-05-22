@@ -102,7 +102,7 @@ class FlowsGenerator(BaseGenerator[FlowsGeneratorInput]):
                 "{{flows}}", flows_).replace(
                 "{{business_objects}}", business_objects_
             ),
-            print_log=True,
+            print_log=False,
         )
         relations_result = self._loads_llm_json(relations_response)
 

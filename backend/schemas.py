@@ -30,6 +30,7 @@ class ScopeStatus(str, Enum):
     """功能范围状态枚举"""
     CURRENT = "本期"
     POSTPONED = "暂缓"
+    EXCLUDE = "排除"
 
 class FlowStepType(str, Enum):
     """流程步骤类型枚举"""
@@ -40,9 +41,12 @@ class FlowStepType(str, Enum):
 class PerceptionKindType(str, Enum):
     """感知槽对应的结点枚举"""
     ACTOR = "角色结点"
-    FEATURE = "功能结点"
+    FEATURE_BRANCH = "功能模块结点"
+    FEATURE_LEAF = "功能叶子结点"
     SCENARIO = "场景结点"
+    ACCEPTANCE_CRITERION = "成功标准结点"
     FLOW = "流程主结点"
+    FLOW_STEP = "流程步骤结点"
 
 # 角色结点
 @node_dataclass
@@ -52,6 +56,13 @@ class ActorNode(BaseNode):
     actorId: int
     actorName: str
     actorDescription: str
+
+# 成功标准
+@node_dataclass
+class AcceptanceCriterionNode(BaseNode):
+    kind: str = field(default="acceptance_criterion", init=False)
+    criterionId: int
+    criterionContent: str
 
 # 场景结点
 @node_dataclass
@@ -63,6 +74,7 @@ class ScenarioNode(BaseNode):
     scenarioContent: str  # 用户故事/场景描述
     featureId: int
     actorId: int
+    acceptanceCriteria: List[AcceptanceCriterionNode] = field(default_factory=list)     # 空数组=没有验收条件
 
 # 范围结点（kano分析结果）
 @node_dataclass
@@ -70,10 +82,10 @@ class ScopeNode(BaseNode):
     kind: str = field(default="scope", init=False)
     scopeId: int
     scopeStatus: ScopeStatus
-    positiveSummary: str
-    negativeSummary: str
     reason: str
 
+    positiveSummary: Optional[str] = None
+    negativeSummary: Optional[str] = None
     positivePictureBase64: Optional[str] = None
     negativePictureBase64: Optional[str] = None
 
@@ -91,7 +103,6 @@ class FeatureNode(BaseNode):
     childrenIds: List[int] = field(default_factory=list)      # 空数组表示无子结点，即该结点为叶子
 
     scenarios: List[ScenarioNode] = field(default_factory=list)      # 空数组表示没有场景
-    acceptanceCriteria: List[str] = field(default_factory=list)     # 空数组=没有验收条件
 
     scope: Optional[ScopeNode] = None
 

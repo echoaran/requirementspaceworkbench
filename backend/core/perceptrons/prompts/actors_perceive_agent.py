@@ -15,7 +15,7 @@ actors_perceive_prompt = """
 
 # 输出格式说明
 {
-    "perceptionDescription": "<‘描述需要补充什么，为何需要补充，如何补充’ | 不需要>"
+    "perception_description": "<‘描述需要补充什么，为何需要补充，如何补充’ | 不需要>"
 }
 
 # 规则
@@ -56,6 +56,6 @@ actors_perceive_prompt = """
 
 ## 示例输出
 {
-    "perceptionDescription": "不需要"
+    "perception_description": "不需要"
 }
 """

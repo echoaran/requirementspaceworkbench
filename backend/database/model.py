@@ -154,7 +154,7 @@ class ProjectModel(TimestampMixin, Base):
     )
     scenarios: Mapped[list["ScenarioModel"]] = relationship(
         back_populates="project",
-        passive_deletes=True,
+        cascade="all, delete-orphan",
     )
     business_objects: Mapped[list[BusinessObjectModel]] = relationship(
         back_populates="project",
@@ -299,12 +299,6 @@ class FeatureModel(TimestampMixin, Base):
         cascade="all, delete-orphan",
     )
 
-    acceptance_criteria: Mapped[list["FeatureAcceptanceCriterionModel"]] = relationship(
-        back_populates="feature",
-        cascade="all, delete-orphan",
-        order_by="FeatureAcceptanceCriterionModel.position",
-    )
-
     flows: Mapped[list["FlowModel"]] = relationship(
         secondary=flow_feature_table,
         back_populates="features",
@@ -340,30 +334,36 @@ class ScopeModel(TimestampMixin, Base):
         nullable=True,
     )
 
-    positive_summary: Mapped[str] = mapped_column(Text, nullable=False)
-    negative_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    positive_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    negative_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
 
     feature: Mapped["FeatureModel"] = relationship(
         back_populates="scope",
     )
 
-class FeatureAcceptanceCriterionModel(TimestampMixin, Base):
-    __tablename__ = "feature_acceptance_criteria"
+class ScenarioAcceptanceCriterionModel(TimestampMixin, Base):
+    __tablename__ = "scenario_acceptance_criteria"
     __table_args__ = (
-        UniqueConstraint("feature_id", "position", name="uq_feature_acceptance_position"),
+        UniqueConstraint(
+            "scenario_id",
+            "position",
+            name="uq_scenario_acceptance_position",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    feature_id: Mapped[int] = mapped_column(
-        ForeignKey("features.id", ondelete="CASCADE"),
+    scenario_id: Mapped[int] = mapped_column(
+        ForeignKey("scenarios.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
-    feature: Mapped[FeatureModel] = relationship(back_populates="acceptance_criteria")
+    scenario: Mapped["ScenarioModel"] = relationship(
+        back_populates="acceptance_criteria",
+    )
 
 
 class ScenarioModel(TimestampMixin, Base):
@@ -393,6 +393,11 @@ class ScenarioModel(TimestampMixin, Base):
     project: Mapped[ProjectModel] = relationship(back_populates="scenarios")
     feature: Mapped[FeatureModel] = relationship(back_populates="scenarios")
     actor: Mapped[ActorModel] = relationship(back_populates="scenarios")
+    acceptance_criteria: Mapped[list[ScenarioAcceptanceCriterionModel]] = relationship(
+        back_populates="scenario",
+        cascade="all, delete-orphan",
+        order_by="ScenarioAcceptanceCriterionModel.position",
+    )
 
 
 class BusinessObjectModel(TimestampMixin, Base):

@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field
 
 class ProjectCreationDraftCreateRequest(BaseModel):
     user_requirements: str = Field(min_length=1)
+    project_name: str | None = None
+    project_description: str | None = None
 
 class ProjectPreview(BaseModel):
     project_name: str

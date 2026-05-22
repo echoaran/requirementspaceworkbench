@@ -10,6 +10,8 @@ from backend.schemas import ActorNode, FeatureNode
 
 
 class FlowGenerationService:
+    # Below 8 leaves, one-shot generation keeps fewer LLM calls and enough context.
+    _three_step_leaf_feature_threshold = 8
     _business_object_number_pattern = re.compile(
         r"^B-\d{3}$"
     )
@@ -101,9 +103,17 @@ class FlowGenerationService:
         project_id: int,
         session,
     ) -> tuple[dict, dict]:
-        user_requirements, actor_nodes, feature_nodes = await self._load_project_context(
+        (
+            user_requirements,
+            actor_nodes,
+            feature_nodes,
+            leaf_feature_count,
+        ) = await self._load_project_context(
             project_id=project_id,
             session=session,
+        )
+        use_three_step_generation = (
+            leaf_feature_count >= self._three_step_leaf_feature_threshold
         )
 
         raw = await self._flows_generator.generate(
@@ -111,7 +121,8 @@ class FlowGenerationService:
                 user_requirements=user_requirements,
                 actors=actor_nodes,
                 features=feature_nodes,
-            )
+            ),
+            use_old_prompt=not use_three_step_generation,
         )
 
         self._validate_generated_flows(
@@ -122,6 +133,12 @@ class FlowGenerationService:
 
         draft_payload = {
             "project_id": project_id,
+            "generation_mode": (
+                "three_step"
+                if use_three_step_generation
+                else "single_step"
+            ),
+            "leaf_feature_count": leaf_feature_count,
             "business_objects": raw["business_objects"],
             "flows": raw["flows"],
         }
@@ -139,7 +156,7 @@ class FlowGenerationService:
     async def _load_project_context(
             project_id: int,
         session,
-    ) -> tuple[str, list[ActorNode], list[FeatureNode]]:
+    ) -> tuple[str, list[ActorNode], list[FeatureNode], int]:
         from backend.database.model import (
             ActorModel,
             FeatureModel,
@@ -255,7 +272,12 @@ class FlowGenerationService:
         if not leaf_features:
             raise ValueError("empty_leaf_features")
 
-        return project.user_requirements, actor_nodes, feature_nodes
+        return (
+            project.user_requirements,
+            actor_nodes,
+            feature_nodes,
+            len(leaf_features),
+        )
 
     def _validate_generated_flows(
         self,
@@ -460,6 +482,8 @@ class FlowGenerationService:
 
         return {
             "project_id": project_id,
+            "generation_mode": draft_payload["generation_mode"],
+            "leaf_feature_count": draft_payload["leaf_feature_count"],
             "business_objects": business_objects_preview,
             "flows": flows_preview,
         }

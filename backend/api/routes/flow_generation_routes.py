@@ -25,6 +25,8 @@ FLOW_GENERATION_ERRORS = {
     "empty_actors",
     "empty_features",
     "empty_leaf_features",
+    "empty_llm_response",
+    "invalid_llm_response",
     "empty_business_objects",
     "empty_flows",
     "empty_flow_steps",

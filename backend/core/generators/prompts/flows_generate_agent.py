@@ -195,7 +195,7 @@ flows_generate_prompt = """
             ]
         },
         {
-            "feature_id": 18,
+            "feature_id": 19,
             "feature_name": "开机常驻",
             "feature_description": "支持用户设置软件开机后自动运行并保持常驻，便于随时查看和记录信息。",
             "actor_ids": [
@@ -203,7 +203,7 @@ flows_generate_prompt = """
             ]
         },
         {
-            "feature_id": 19,
+            "feature_id": 20,
             "feature_name": "默认便签样式配置",
             "feature_description": "支持用户配置默认字体、默认颜色和默认显示样式，减少重复设置操作。",
             "actor_ids": [
@@ -496,8 +496,8 @@ flows_generate_prompt = """
                 7,
                 8,
                 15,
-                18,
-                19
+                19,
+                20
             ],
             "flow_steps": [
                 {
@@ -2659,7 +2659,7 @@ flows_generate_prompt_old = """
             ]
         },
         {
-            "feature_id": 18,
+            "feature_id": 19,
             "feature_name": "开机常驻",
             "feature_description": "支持用户设置软件开机后自动运行并保持常驻，便于随时查看和记录信息。",
             "actor_ids": [
@@ -2667,7 +2667,7 @@ flows_generate_prompt_old = """
             ]
         },
         {
-            "feature_id": 19,
+            "feature_id": 20,
             "feature_name": "默认便签样式配置",
             "feature_description": "支持用户配置默认字体、默认颜色和默认显示样式，减少重复设置操作。",
             "actor_ids": [
@@ -3246,8 +3246,8 @@ flows_generate_prompt_old = """
                 7,
                 8,
                 15,
-                18,
-                19
+                19,
+                20
             ],
             "flow_steps": [
                 {

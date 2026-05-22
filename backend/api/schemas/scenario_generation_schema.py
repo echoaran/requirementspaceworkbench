@@ -23,9 +23,13 @@ class ScenarioGenerationDraftResponse(BaseModel):
     feature_id: int | None = None
     scenarios: list[GeneratedScenarioPreview]
 
+class ScenarioGenerationConfirmRequest(BaseModel):
+    generate_acceptance_criteria: bool = False
+
 class ScenarioGenerationConfirmResponse(BaseModel):
     project_id: int
     scenario_count: int
+    acceptance_criterion_count: int = 0
     message: str = "scenarios_created"
 
 class ScenarioGenerationDraftDiscardResponse(BaseModel):

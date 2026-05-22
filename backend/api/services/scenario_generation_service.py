@@ -3,6 +3,10 @@ from uuid import uuid4
 
 from sqlalchemy import select
 
+from backend.api.services.acceptance_criteria_generation_service import (
+    AcceptanceCriteriaGenerationService,
+)
+
 from backend.core.generators.scenarios_generator import (
     ScenariosGenerator,
     ScenariosGeneratorInput,
@@ -14,6 +18,9 @@ class ScenarioGenerationService:
     def __init__(self):
         self._drafts: dict[str, dict] = {}
         self._scenarios_generator = ScenariosGenerator()
+        self._acceptance_criteria_generation_service = (
+            AcceptanceCriteriaGenerationService()
+        )
         self._max_concurrency = 5       # 限流并发数
 
     async def create_full_draft(
@@ -84,6 +91,7 @@ class ScenarioGenerationService:
         self,
         draft_id: str,
         session,
+        generate_acceptance_criteria: bool = False,
     ) -> dict:
         draft = self._get_draft(draft_id)
 
@@ -91,6 +99,21 @@ class ScenarioGenerationService:
             draft=draft,
             session=session,
         )
+        scenario_ids = result.pop("scenario_ids")
+
+        if generate_acceptance_criteria:
+            acceptance_criteria_result = await (
+                self._acceptance_criteria_generation_service
+            ).create_and_persist_for_scenarios(
+                project_id=draft["project_id"],
+                scenario_ids=scenario_ids,
+                session=session,
+            )
+            result["acceptance_criterion_count"] = (
+                acceptance_criteria_result["acceptance_criterion_count"]
+            )
+        else:
+            result["acceptance_criterion_count"] = 0
 
         self._drafts.pop(draft_id, None)
 
@@ -416,6 +439,7 @@ class ScenarioGenerationService:
         from backend.database.model import ScenarioModel
 
         project_id = draft["project_id"]
+        scenarios = []
 
         for item in draft["scenarios"]:
             scenario = ScenarioModel(
@@ -427,11 +451,16 @@ class ScenarioGenerationService:
             )
 
             session.add(scenario)
+            scenarios.append(scenario)
 
         await session.flush()
 
         return {
             "project_id": project_id,
             "scenario_count": len(draft["scenarios"]),
+            "scenario_ids": [
+                scenario.id
+                for scenario in scenarios
+            ],
             "message": "scenarios_created",
         }

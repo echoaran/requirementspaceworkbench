@@ -4,32 +4,19 @@ from typing import Dict, List
 
 from backend.core.perceptrons.prompts import flows_perceive_prompt
 from backend.core.perceptrons.base_perceptron import BasePerceptron, PerceptronInput
-from backend.schemas import ActorNode, FeatureNode, FlowNode, BusinessObjectNode
+from backend.schemas import FeatureNode, FlowNode
 
 
 # 为流程感知器定义专属的输入类型
 @dataclass
 class FlowsPerceptronInput(PerceptronInput):
     user_requirements: str
-    actors: List[ActorNode]
     features: List[FeatureNode]
-    business_objects: List[BusinessObjectNode]
     flows: List[FlowNode]
 
 class FlowsPerceptron(BasePerceptron[FlowsPerceptronInput]):
     async def perceive(self, input_data: FlowsPerceptronInput) -> Dict:
         user_requirements_ = input_data.user_requirements
-
-        actors_payload = ActorNode.schema(
-            many=True,
-            only=("actorId", "actorName", "actorDescription")
-        ).dump(input_data.actors)
-
-        actors_ = json.dumps(
-            {"actors": actors_payload},
-            ensure_ascii=False,
-            indent=2
-        )
 
         features_payload = FeatureNode.schema(
             many=True,
@@ -42,20 +29,6 @@ class FlowsPerceptron(BasePerceptron[FlowsPerceptronInput]):
             indent=2
         )
 
-        business_objects_payload = BusinessObjectNode.schema(
-            many=True,
-            only=(
-                "businessObjectId",
-                "businessObjectName",
-                "businessObjectDescription",
-                "businessObjectAttributes.businessObjectAttributeId",
-                "businessObjectAttributes.businessObjectAttributeName",
-                "businessObjectAttributes.businessObjectAttributeDescription",
-                "businessObjectAttributes.businessObjectAttributeType",
-                "businessObjectAttributes.businessObjectAttributeExample",
-            ),
-        ).dump(input_data.business_objects)
-
         flows_payload = FlowNode.schema(
             many=True,
             only=(
@@ -66,19 +39,12 @@ class FlowsPerceptron(BasePerceptron[FlowsPerceptronInput]):
                 "flowSteps.stepId",
                 "flowSteps.stepName",
                 "flowSteps.stepDescription",
-                "flowSteps.stepType",
-                "flowSteps.actorIds",
-                "flowSteps.inputBusinessObjectIds",
-                "flowSteps.outputBusinessObjectIds",
                 "flowSteps.nextStepIds",
             ),
         ).dump(input_data.flows)
 
         flows_ = json.dumps(
-            {
-                "business_objects": business_objects_payload,
-                "flows": flows_payload,
-            },
+            {"flows": flows_payload,},
             ensure_ascii=False,
             indent=2,
         )
@@ -86,7 +52,6 @@ class FlowsPerceptron(BasePerceptron[FlowsPerceptronInput]):
         response = await self._llm_handler.call_llm(
             prompt=flows_perceive_prompt.replace(
                 "{{user_requirements}}", user_requirements_).replace(
-                "{{actors}}", actors_).replace(
                 "{{features}}", features_).replace(
                 "{{flows}}", flows_),
             print_log=False,
@@ -97,8 +62,6 @@ class FlowsPerceptron(BasePerceptron[FlowsPerceptronInput]):
 if __name__ == "__main__":
     import asyncio
     from backend.schemas import (
-        BusinessObjectAttributeNode,
-        BusinessObjectNode,
         FlowNode,
         FlowStepNode,
         FlowStepType,
@@ -107,43 +70,6 @@ if __name__ == "__main__":
     flows_perceptron = FlowsPerceptron()
 
     user_requirements = "极简纯净本地音乐播放器，不联网、无会员、无广告，只读取电脑本地音乐文件，支持无损格式 Flac/WAV/MP3 播放，自带歌词本地匹配、音效均衡器、歌单自定义、睡眠定时关闭、全局快捷键切歌，界面清爽轻量化，替代臃肿的主流音乐播放器。"
-    test_actors = [
-        ActorNode(
-            actorId=1,
-            actorName="本地音乐听众",
-            actorDescription="本地音乐听众是指在需要播放和聆听电脑本地音乐文件的场景下，与音乐播放器发生交互，并可执行导入或扫描本地音乐、播放暂停、切换上一首下一首、调整播放进度、管理播放列表和选择音频格式进行播放等操作的用户角色。"
-        ),
-        ActorNode(
-            actorId=2,
-            actorName="歌单管理者",
-            actorDescription="歌单管理者是指在需要按个人喜好整理和归类本地音乐的场景下，与歌单管理功能发生交互，并可执行新建歌单、编辑歌单、添加或移除歌曲、排序歌曲、删除歌单和自定义歌单内容等操作的用户角色。"
-        ),
-        ActorNode(
-            actorId=3,
-            actorName="音效调节者",
-            actorDescription="音效调节者是指在需要根据听感优化音乐播放效果的场景下，与音效设置功能发生交互，并可执行调整均衡器、配置音效参数、切换预设音效和保存个人音效偏好等操作的用户角色。"
-        ),
-        ActorNode(
-            actorId=4,
-            actorName="歌词匹配者",
-            actorDescription="歌词匹配者是指在需要查看本地歌曲对应歌词的场景下，与歌词匹配功能发生交互，并可执行本地歌词自动匹配、查看歌词显示、调整歌词同步效果和管理歌词关联结果等操作的用户角色。"
-        ),
-        ActorNode(
-            actorId=5,
-            actorName="睡眠定时设置者",
-            actorDescription="睡眠定时设置者是指在需要限定音乐播放时长并在指定时间自动关闭播放器的场景下，与睡眠定时功能发生交互，并可执行设置定时关闭时间、取消定时、查看倒计时和管理播放结束行为等操作的用户角色。"
-        ),
-        ActorNode(
-            actorId=6,
-            actorName="快捷键控制者",
-            actorDescription="快捷键控制者是指在需要通过全局快捷键快速控制播放的场景下，与全局快捷键功能发生交互，并可执行设置切歌快捷键、使用快捷键播放暂停、上一首下一首切换和快速调节播放控制等操作的用户角色。"
-        ),
-        ActorNode(
-            actorId=7,
-            actorName="界面偏好设置者",
-            actorDescription="界面偏好设置者是指在需要让播放器保持清爽、轻量和低干扰使用体验的场景下，与界面设置功能发生交互，并可执行调整界面显示样式、切换轻量化布局、配置视觉风格和管理播放器外观偏好的用户角色。"
-        ),
-    ]
     test_features: List[FeatureNode] = [
         FeatureNode(
             featureId=1,
@@ -350,360 +276,6 @@ if __name__ == "__main__":
             childrenIds=[]
         )
     ]
-
-    test_business_objects = [
-        BusinessObjectNode(
-            businessObjectId=1,
-            businessObjectName="本地音乐文件",
-            businessObjectDescription="表示从电脑本地读取、扫描或导入的音频文件，是音乐播放、歌单管理、歌词匹配和播放控制的基础数据对象。",
-            businessObjectAttributes=[
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=1,
-                    businessObjectAttributeName="file_path",
-                    businessObjectAttributeDescription="音乐文件在本地电脑中的存储路径。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="D:/Music/周杰伦-晴天.mp3",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=2,
-                    businessObjectAttributeName="file_name",
-                    businessObjectAttributeDescription="音乐文件名称。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="周杰伦-晴天.mp3",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=3,
-                    businessObjectAttributeName="audio_format",
-                    businessObjectAttributeDescription="音乐文件的音频格式。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="MP3",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=4,
-                    businessObjectAttributeName="duration_seconds",
-                    businessObjectAttributeDescription="音乐文件的播放时长，单位为秒。",
-                    businessObjectAttributeType="integer",
-                    businessObjectAttributeExample="269",
-                ),
-            ],
-        ),
-        BusinessObjectNode(
-            businessObjectId=2,
-            businessObjectName="音乐库",
-            businessObjectDescription="表示系统扫描和导入后形成的本地音乐集合，用于支持歌曲检索、播放和歌单添加。",
-            businessObjectAttributes=[
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=5,
-                    businessObjectAttributeName="library_id",
-                    businessObjectAttributeDescription="音乐库唯一标识。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="LIB-001",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=6,
-                    businessObjectAttributeName="music_file_ids",
-                    businessObjectAttributeDescription="音乐库中包含的本地音乐文件编号集合。",
-                    businessObjectAttributeType="array[string]",
-                    businessObjectAttributeExample="[\"M-001\", \"M-002\"]",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=7,
-                    businessObjectAttributeName="last_scan_time",
-                    businessObjectAttributeDescription="最近一次扫描或导入音乐的时间。",
-                    businessObjectAttributeType="datetime",
-                    businessObjectAttributeExample="2026-05-20 10:30:00",
-                ),
-            ],
-        ),
-        BusinessObjectNode(
-            businessObjectId=3,
-            businessObjectName="播放会话",
-            businessObjectDescription="表示当前音乐播放过程中的状态数据，包括当前歌曲、播放状态、播放进度和播放模式。",
-            businessObjectAttributes=[
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=8,
-                    businessObjectAttributeName="current_music_id",
-                    businessObjectAttributeDescription="当前正在播放或准备播放的音乐文件编号。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="M-001",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=9,
-                    businessObjectAttributeName="play_status",
-                    businessObjectAttributeDescription="当前播放状态。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="playing",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=10,
-                    businessObjectAttributeName="current_position_seconds",
-                    businessObjectAttributeDescription="当前播放进度，单位为秒。",
-                    businessObjectAttributeType="integer",
-                    businessObjectAttributeExample="85",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=11,
-                    businessObjectAttributeName="play_source",
-                    businessObjectAttributeDescription="当前播放来源。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="playlist",
-                ),
-            ],
-        ),
-        BusinessObjectNode(
-            businessObjectId=4,
-            businessObjectName="歌单",
-            businessObjectDescription="表示用户创建和维护的歌曲集合，用于按照个人偏好分类管理本地音乐。",
-            businessObjectAttributes=[
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=12,
-                    businessObjectAttributeName="playlist_id",
-                    businessObjectAttributeDescription="歌单唯一标识。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="PL-001",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=13,
-                    businessObjectAttributeName="playlist_name",
-                    businessObjectAttributeDescription="歌单名称。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="通勤歌曲",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=14,
-                    businessObjectAttributeName="song_ids",
-                    businessObjectAttributeDescription="歌单中包含的歌曲编号集合。",
-                    businessObjectAttributeType="array[string]",
-                    businessObjectAttributeExample="[\"M-001\", \"M-003\", \"M-009\"]",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=15,
-                    businessObjectAttributeName="sort_rule",
-                    businessObjectAttributeDescription="歌单内歌曲排序规则。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="manual",
-                ),
-            ],
-        ),
-        BusinessObjectNode(
-            businessObjectId=5,
-            businessObjectName="歌词文件",
-            businessObjectDescription="表示与本地歌曲对应的歌词内容或歌词文件，用于播放界面歌词展示和同步。",
-            businessObjectAttributes=[
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=16,
-                    businessObjectAttributeName="lyric_id",
-                    businessObjectAttributeDescription="歌词文件唯一标识。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="LYR-001",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=17,
-                    businessObjectAttributeName="lyric_path",
-                    businessObjectAttributeDescription="歌词文件在本地电脑中的存储路径。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="D:/Lyrics/周杰伦-晴天.lrc",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=18,
-                    businessObjectAttributeName="lyric_content",
-                    businessObjectAttributeDescription="歌词文本内容。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="[00:12.00]故事的小黄花",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=19,
-                    businessObjectAttributeName="time_offset_ms",
-                    businessObjectAttributeDescription="歌词同步偏移量，单位为毫秒。",
-                    businessObjectAttributeType="integer",
-                    businessObjectAttributeExample="500",
-                ),
-            ],
-        ),
-        BusinessObjectNode(
-            businessObjectId=6,
-            businessObjectName="歌词关联结果",
-            businessObjectDescription="表示歌曲与歌词之间的匹配或手动关联关系，用于维护歌词显示准确性。",
-            businessObjectAttributes=[
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=20,
-                    businessObjectAttributeName="association_id",
-                    businessObjectAttributeDescription="歌词关联关系唯一标识。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="LRA-001",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=21,
-                    businessObjectAttributeName="music_id",
-                    businessObjectAttributeDescription="被关联的音乐文件编号。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="M-001",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=22,
-                    businessObjectAttributeName="lyric_id",
-                    businessObjectAttributeDescription="关联的歌词文件编号。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="LYR-001",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=23,
-                    businessObjectAttributeName="match_type",
-                    businessObjectAttributeDescription="歌词匹配方式。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="auto",
-                ),
-            ],
-        ),
-        BusinessObjectNode(
-            businessObjectId=7,
-            businessObjectName="音效配置",
-            businessObjectDescription="表示用户为优化播放听感而配置的均衡器、预设音效和音效参数。",
-            businessObjectAttributes=[
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=24,
-                    businessObjectAttributeName="effect_config_id",
-                    businessObjectAttributeDescription="音效配置唯一标识。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="EQ-001",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=25,
-                    businessObjectAttributeName="preset_name",
-                    businessObjectAttributeDescription="当前使用的预设音效名称。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="Rock",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=26,
-                    businessObjectAttributeName="equalizer_values",
-                    businessObjectAttributeDescription="均衡器各频段参数集合。",
-                    businessObjectAttributeType="object",
-                    businessObjectAttributeExample="{\"60Hz\": 3, \"230Hz\": 1, \"910Hz\": -1}",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=27,
-                    businessObjectAttributeName="is_saved_as_preference",
-                    businessObjectAttributeDescription="是否保存为个人音效偏好。",
-                    businessObjectAttributeType="bool",
-                    businessObjectAttributeExample="true",
-                ),
-            ],
-        ),
-        BusinessObjectNode(
-            businessObjectId=8,
-            businessObjectName="睡眠定时设置",
-            businessObjectDescription="表示用户设置的定时关闭规则，包括倒计时、结束动作和当前状态。",
-            businessObjectAttributes=[
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=28,
-                    businessObjectAttributeName="timer_id",
-                    businessObjectAttributeDescription="睡眠定时设置唯一标识。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="TIMER-001",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=29,
-                    businessObjectAttributeName="duration_minutes",
-                    businessObjectAttributeDescription="定时关闭倒计时时长，单位为分钟。",
-                    businessObjectAttributeType="integer",
-                    businessObjectAttributeExample="30",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=30,
-                    businessObjectAttributeName="remaining_seconds",
-                    businessObjectAttributeDescription="当前剩余倒计时时长，单位为秒。",
-                    businessObjectAttributeType="integer",
-                    businessObjectAttributeExample="1200",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=31,
-                    businessObjectAttributeName="end_action",
-                    businessObjectAttributeDescription="倒计时结束后的处理方式。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="stop_playback",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=32,
-                    businessObjectAttributeName="timer_status",
-                    businessObjectAttributeDescription="定时器当前状态。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="active",
-                ),
-            ],
-        ),
-        BusinessObjectNode(
-            businessObjectId=9,
-            businessObjectName="快捷键配置",
-            businessObjectDescription="表示用户设置的全局快捷键规则，用于快速控制播放、暂停、上一首和下一首。",
-            businessObjectAttributes=[
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=33,
-                    businessObjectAttributeName="hotkey_config_id",
-                    businessObjectAttributeDescription="快捷键配置唯一标识。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="HK-001",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=34,
-                    businessObjectAttributeName="command_name",
-                    businessObjectAttributeDescription="快捷键绑定的播放控制命令。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="next_track",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=35,
-                    businessObjectAttributeName="key_combination",
-                    businessObjectAttributeDescription="快捷键组合。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="Ctrl+Alt+Right",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=36,
-                    businessObjectAttributeName="is_global_enabled",
-                    businessObjectAttributeDescription="是否启用全局快捷键。",
-                    businessObjectAttributeType="bool",
-                    businessObjectAttributeExample="true",
-                ),
-            ],
-        ),
-        BusinessObjectNode(
-            businessObjectId=10,
-            businessObjectName="界面偏好设置",
-            businessObjectDescription="表示用户对播放器界面样式、轻量化布局和视觉风格的长期偏好配置。",
-            businessObjectAttributes=[
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=37,
-                    businessObjectAttributeName="interface_preference_id",
-                    businessObjectAttributeDescription="界面偏好设置唯一标识。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="UI-001",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=38,
-                    businessObjectAttributeName="layout_mode",
-                    businessObjectAttributeDescription="当前界面布局模式。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="lightweight",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=39,
-                    businessObjectAttributeName="theme_name",
-                    businessObjectAttributeDescription="当前视觉主题名称。",
-                    businessObjectAttributeType="string",
-                    businessObjectAttributeExample="dark",
-                ),
-                BusinessObjectAttributeNode(
-                    businessObjectAttributeId=40,
-                    businessObjectAttributeName="show_extra_elements",
-                    businessObjectAttributeDescription="是否显示额外视觉元素。",
-                    businessObjectAttributeType="bool",
-                    businessObjectAttributeExample="false",
-                ),
-            ],
-        ),
-    ]
-
     test_flows = [
         FlowNode(
             flowId=1,
@@ -1315,12 +887,12 @@ if __name__ == "__main__":
 
     async def main():
         flows_perceptron_result = await flows_perceptron.perceive(
-            FlowsPerceptronInput(user_requirements, test_actors, test_features,test_business_objects, test_flows)
+            FlowsPerceptronInput(user_requirements, test_features, test_flows)
         )
     asyncio.run(main())
 
     result = """
 {
-  "perceptionDescription": "需要补充系统流程。\n\n需要补充什么：\n1) 应用启动/退出与本地数据持久化流程（配置加载、库/歌单/关联数据加载、退出时保存）。\n2) 音乐库增量维护流程（再次扫描、文件变更/丢失处理、库去重与更新索引）。\n3) 从歌单发起播放与播放队列生成流程（选择歌单->生成播放队列->更新播放会话来源与当前曲目）。\n4) 播放异常与降级处理流程（文件无法读取/解码失败、歌词缺失或不可用、音频设备不可用等情况下的提示与跳过策略）。\n\n为何需要补充：\n- 当前流程覆盖“导入/播放、歌单、歌词、音效、定时、快捷键、界面”，但缺少跨模块的生命周期与持久化主流程，导致无法解释“清爽轻量但可长期使用”的核心体验（重启后库/歌单/歌词关联/音效/快捷键/界面偏好如何恢复）。\n- 音乐只读取本地文件，真实使用中经常发生文件移动/删除/新增；现有仅一次性导入，缺少库一致性维护流程会造成大量失效条目与播放失败。\n- 当前播放流程仅描述从音乐库选歌播放，播放会话里却出现 play_source=playlist，但没有“从歌单播放/队列”的独立流程，流程间衔接不完整。\n- “极简纯净”要求出现错误时不打断体验；缺少统一异常流程会让播放控制、歌词、快捷键等在失败时行为不可控。\n\n如何补充：\n- 新增 business object（或在现有对象上补属性）以支撑上述流程：\n  a) 本地存储状态/配置仓库（包含 library_id、playlist_ids、last_opened_playlist、last_play_session_snapshot、各类偏好版本与保存时间）。\n  b) 播放队列（queue_id、track_ids、current_index、queue_source=library/playlist、repeat_mode、shuffle_enabled）。\n  c) 扫描任务/索引状态（scan_job_id、target_paths、scan_type=full/incremental、added/updated/removed 统计、error_list）。\n  d) 播放错误事件（error_id、music_id、error_type、action_taken=skip/retry/stop）。\n- 在 flows 中补 4 条流程，并让其与现有流程通过输入输出对象衔接：\n  1) “应用启动与数据加载流程”：启动->读取本地存储->加载音乐库/歌单/歌词关联/各类偏好->（可选）恢复播放会话/播放队列。\n  2) “音乐库增量扫描与一致性维护流程”：选择扫描策略->扫描路径->对比索引->新增/更新/移除条目->更新音乐库与歌单内失效引用处理策略（标记失效/自动移除）。\n  3) “歌单发起播放与队列生成流程”：选择歌单->生成播放队列->创建/更新播放会话(play_source=playlist)->进入播放控制（复用现有播放控制步骤）。\n  4) “播放异常处理流程”：播放中捕获错误->判断错误类型->执行跳过/重试/停止->更新播放会话与错误记录，并在 UI 以轻提示呈现。"
+    "perception_description": "需要补充“播放器启动与偏好恢复流程”。原因是当前已有流程覆盖了导入播放、歌单管理、歌词、音效、睡眠定时、全局快捷键和界面偏好的配置与使用，但缺少一个从“启动应用”到“恢复用户习惯状态”的整体运行流程：例如读取已保存的音乐库、音效设置、界面布局、快捷键绑定、歌词同步偏移以及上次播放状态（如是否继续上次播放、默认打开哪个歌单/页面）等。对一个强调极简、清爽、替代主流播放器的本地播放器来说，这种“启动即就绪”的能力是核心体验的一部分，仅靠单独的设置流程无法体现其在应用启动时如何被应用。补充方式是新增一个“播放器启动与会话恢复流程”，不引入新 feature，而是关联已有音效、界面偏好、快捷键、歌词匹配、音乐导入等相关 feature：步骤可包括（1）启动应用并加载基础配置；（2）读取已保存音乐库索引（如不存在则提示用户扫描本地音乐）；（3）加载用户界面偏好和布局（标准/轻量、视觉风格）；（4）加载音效配置并应用到默认输出；（5）注册全局快捷键；（6）恢复歌词关联与同步偏移；（7）根据用户设置决定是否自动恢复上次播放会话（歌曲、播放位置或仅停留在暂停状态）。通过该启动流程，将零散的设置/控制能力在应用生命周期入口处整合起来，确保系统行为与“极简纯净”“开箱即用”的目标体验一致。"
 }
 """

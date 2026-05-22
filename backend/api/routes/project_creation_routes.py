@@ -19,6 +19,7 @@ FEATURE_GENERATION_ERRORS = {
     "invalid_feature_number_format",
     "missing_parent_feature",
     "invalid_root_feature_count",
+    "invalid_project_payload",
 }
 
 router = APIRouter(
@@ -38,6 +39,8 @@ async def create_project_creation_draft(
     try:
         return await project_creation_service.create_draft(
             user_requirements=request.user_requirements,
+            project_name=request.project_name,
+            project_description=request.project_description,
         )
     except ValueError as error:
         if str(error) in FEATURE_GENERATION_ERRORS:

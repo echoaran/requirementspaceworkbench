@@ -52,3 +52,6 @@ htmlcov/
 
 # 数据库文件
 requirement_space.db
+
+# 备注
+note.md

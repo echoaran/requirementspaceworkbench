@@ -33,6 +33,8 @@ class GeneratedFlowPreview(BaseModel):
 class FlowGenerationDraftResponse(BaseModel):
     draft_id: str
     project_id: int
+    generation_mode: str
+    leaf_feature_count: int
     business_objects: list[GeneratedBusinessObjectPreview]
     flows: list[GeneratedFlowPreview]
 

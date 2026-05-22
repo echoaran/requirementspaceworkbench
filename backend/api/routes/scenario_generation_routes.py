@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.schemas.scenario_generation_schema import (
+    ScenarioGenerationConfirmRequest,
     ScenarioGenerationConfirmResponse,
     ScenarioGenerationDraftDiscardResponse,
     ScenarioGenerationDraftResponse,
@@ -34,6 +35,13 @@ SCENARIO_GENERATION_ERRORS = {
     "empty_generation_targets",
     "empty_scenarios",
     "invalid_scenario_payload",
+    "invalid_scenario_reference",
+    "duplicate_scenario_id",
+    "invalid_scenario_actor_reference",
+    "invalid_scenario_feature_reference",
+    "empty_acceptance_criteria",
+    "invalid_acceptance_criteria_payload",
+    "acceptance_criteria_already_exist",
 }
 
 @router.post(
@@ -113,12 +121,20 @@ async def regenerate_scenario_generation_draft(
 )
 async def confirm_scenario_generation_draft(
     draft_id: str,
+    request: ScenarioGenerationConfirmRequest | None = Body(default=None),
     session: AsyncSession = Depends(get_session),
 ):
     try:
+        generate_acceptance_criteria = (
+            request.generate_acceptance_criteria
+            if request is not None
+            else False
+        )
+
         return await scenario_generation_service.confirm_draft(
             draft_id=draft_id,
             session=session,
+            generate_acceptance_criteria=generate_acceptance_criteria,
         )
     except ValueError as error:
         if str(error) == "draft_not_found":

@@ -1,3 +1,4 @@
+import asyncio
 from uuid import uuid4
 import re
 from sqlalchemy import insert
@@ -5,6 +6,10 @@ from sqlalchemy import insert
 from backend.core.generators.actors_generator import (
     ActorsGenerator,
     ActorsGeneratorInput,
+)
+from backend.core.generators.blank_project_generator import (
+    BlankProjectGenerator,
+    BlankProjectGeneratorInput,
 )
 from backend.core.generators.features_generator import (
     FeaturesGenerator,
@@ -17,6 +22,7 @@ class ProjectCreationService:
     def __init__(self):
         self._drafts: dict[str, dict] = {}
         self._actors_generator = ActorsGenerator()
+        self._blank_project_generator = BlankProjectGenerator()
         self._features_generator = FeaturesGenerator()
 
     _feature_number_pattern = re.compile(
@@ -78,11 +84,15 @@ class ProjectCreationService:
     async def create_draft(
             self,
             user_requirements: str,
+            project_name: str | None = None,
+            project_description: str | None = None,
     ) -> dict:
         draft_id = uuid4().hex
 
         draft_payload, response_payload = await self._generate_preview(
             user_requirements=user_requirements,
+            project_name=project_name,
+            project_description=project_description,
         )
 
         draft_payload["draft_id"] = draft_id
@@ -100,6 +110,16 @@ class ProjectCreationService:
 
         draft_payload, response_payload = await self._generate_preview(
             user_requirements=draft["user_requirements"],
+            project_name=(
+                draft["project_preview"]["project_name"]
+                if draft.get("project_name_provided")
+                else None
+            ),
+            project_description=(
+                draft["project_preview"]["project_description"]
+                if draft.get("project_description_provided")
+                else None
+            ),
         )
 
         draft_payload["draft_id"] = draft_id
@@ -144,7 +164,97 @@ class ProjectCreationService:
     async def _generate_preview(
             self,
             user_requirements: str,
+            project_name: str | None = None,
+            project_description: str | None = None,
     ) -> tuple[dict, dict]:
+        normalized_project_name = self._normalize_optional_text(
+            project_name
+        )
+        normalized_project_description = self._normalize_optional_text(
+            project_description
+        )
+
+        project_preview_task = asyncio.create_task(
+            self._generate_project_preview(
+                user_requirements=user_requirements,
+                project_name=normalized_project_name,
+                project_description=normalized_project_description,
+            )
+        )
+        actor_feature_task = asyncio.create_task(
+            self._generate_actor_and_feature_previews(
+                user_requirements=user_requirements,
+            )
+        )
+
+        (
+            project_preview,
+            (
+                actor_previews_for_draft,
+                actor_previews_for_response,
+                feature_previews_for_draft,
+                feature_previews_for_response,
+            ),
+        ) = await asyncio.gather(
+            project_preview_task,
+            actor_feature_task,
+        )
+
+        draft_payload = {
+            "user_requirements": user_requirements,
+            "project_preview": project_preview,
+            "project_name_provided": normalized_project_name is not None,
+            "project_description_provided": (
+                normalized_project_description is not None
+            ),
+            "actors": actor_previews_for_draft,
+            "features": feature_previews_for_draft,
+        }
+
+        response_payload = {
+            "user_requirements": user_requirements,
+            "project_preview": project_preview,
+            "actors": actor_previews_for_response,
+            "features": feature_previews_for_response,
+        }
+
+        return draft_payload, response_payload
+
+    async def _generate_project_preview(
+        self,
+        user_requirements: str,
+        project_name: str | None,
+        project_description: str | None,
+    ) -> dict:
+        if project_name is not None and project_description is not None:
+            return {
+                "project_name": project_name,
+                "project_description": project_description,
+            }
+
+        raw = await self._blank_project_generator.generate(
+            BlankProjectGeneratorInput(
+                user_requirements=user_requirements,
+            )
+        )
+
+        generated_project_name = raw.get("project_name")
+        generated_project_description = raw.get("project_description")
+
+        if not generated_project_name or not generated_project_description:
+            raise ValueError("invalid_project_payload")
+
+        return {
+            "project_name": project_name or generated_project_name,
+            "project_description": (
+                project_description or generated_project_description
+            ),
+        }
+
+    async def _generate_actor_and_feature_previews(
+        self,
+        user_requirements: str,
+    ) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
         actors_raw = await self._actors_generator.generate(
             ActorsGeneratorInput(
                 user_requirements=user_requirements,
@@ -212,10 +322,6 @@ class ProjectCreationService:
                 }
             )
 
-        root_feature = self._find_root_feature(
-            feature_previews_for_draft
-        )
-
         actor_number_to_name = {
             actor["actor_number"]: actor["actor_name"]
             for actor in actor_previews_for_draft
@@ -241,27 +347,12 @@ class ProjectCreationService:
             for feature in feature_previews_for_draft
         ]
 
-        draft_payload = {
-            "user_requirements": user_requirements,
-            "project_preview": {
-                "project_name": root_feature["feature_name"],
-                "project_description": root_feature["feature_description"],
-            },
-            "actors": actor_previews_for_draft,
-            "features": feature_previews_for_draft,
-        }
-
-        response_payload = {
-            "user_requirements": user_requirements,
-            "project_preview": {
-                "project_name": root_feature["feature_name"],
-                "project_description": root_feature["feature_description"],
-            },
-            "actors": actor_previews_for_response,
-            "features": feature_previews_for_response,
-        }
-
-        return draft_payload, response_payload
+        return (
+            actor_previews_for_draft,
+            actor_previews_for_response,
+            feature_previews_for_draft,
+            feature_previews_for_response,
+        )
 
     def _find_root_feature(
         self,
@@ -289,6 +380,15 @@ class ProjectCreationService:
             raise ValueError("draft_not_found")
 
         return draft
+
+    @staticmethod
+    def _normalize_optional_text(value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        value = value.strip()
+
+        return value or None
 
     async def _persist_project_creation_draft(
         self,

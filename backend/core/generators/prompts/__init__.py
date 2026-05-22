@@ -7,3 +7,6 @@ from backend.core.generators.prompts.flows_generate_agent import (
     flows_generate_prompt_old,
 )
 from backend.core.generators.prompts.scenarios_generate_agent import scenarios_generate_prompt
+from backend.core.generators.prompts.scopes_generate_agent import scopes_generate_prompt
+from backend.core.generators.prompts.acceptance_criteria_generate_agent import acceptance_criteria_generate_prompt
+from backend.core.generators.prompts.blank_project_generate_agent import blank_project_generate_prompt
