@@ -39,6 +39,27 @@ from backend.api.schemas.scenario_generation_schema import (
     ScenarioGenerationFullDraftCreateRequest,
     ScenarioGenerationSingleDraftCreateRequest,
 )
+from backend.api.schemas.issue_schema import (
+    IssueResolutionResponse,
+    IssueResolveRequest,
+    IssueResponse,
+    IssueTargetResponse,
+    ProjectIssuesResponse,
+)
+from backend.api.schemas.next_suggestion_schema import (
+    NextSuggestionResponse,
+    NextSuggestionResponseItem,
+    NextSuggestionStartRequest,
+    NextSuggestionStartResponse,
+)
+from backend.api.schemas.perception_slot_filling_schema import (
+    PerceptionSlotFilledActorPreview,
+    PerceptionSlotFilledFeaturePreview,
+    PerceptionSlotFillingConfirmResponse,
+    PerceptionSlotFillingDraftCreateRequest,
+    PerceptionSlotFillingDraftDiscardResponse,
+    PerceptionSlotFillingDraftResponse,
+)
 
 __all__ = [
     "GeneratedActorPreview",
@@ -70,4 +91,19 @@ __all__ = [
     "ProjectCreationDraftDiscardResponse",
     "ProjectCreationDraftResponse",
     "ProjectPreview",
+    "IssueResolutionResponse",
+    "IssueResolveRequest",
+    "IssueResponse",
+    "IssueTargetResponse",
+    "ProjectIssuesResponse",
+    "NextSuggestionResponse",
+    "NextSuggestionResponseItem",
+    "NextSuggestionStartRequest",
+    "NextSuggestionStartResponse",
+    "PerceptionSlotFilledActorPreview",
+    "PerceptionSlotFilledFeaturePreview",
+    "PerceptionSlotFillingConfirmResponse",
+    "PerceptionSlotFillingDraftCreateRequest",
+    "PerceptionSlotFillingDraftDiscardResponse",
+    "PerceptionSlotFillingDraftResponse",
 ]

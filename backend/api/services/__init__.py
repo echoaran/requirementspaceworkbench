@@ -6,6 +6,13 @@ from backend.api.services.flow_generation_service import FlowGenerationService
 from backend.api.services.scenario_generation_service import ScenarioGenerationService
 from backend.api.services.acceptance_criteria_generation_service import AcceptanceCriteriaGenerationService
 from backend.api.services.scope_generation_service import ScopeGenerationService
+from backend.api.services.issue_service import IssueService
+from backend.api.services.next_suggestion_service import NextSuggestionService
+from backend.api.services.perception_job_service import PerceptionJobService
+from backend.api.services.perception_slot_filling_service import PerceptionSlotFillingService
+from backend.api.services.perception_job_invalidation_service import (
+    mark_perception_jobs_stale,
+)
 
 __all__ = [
     "ProjectCreationService",
@@ -16,4 +23,9 @@ __all__ = [
     "ScenarioGenerationService",
     "AcceptanceCriteriaGenerationService",
     "ScopeGenerationService",
+    "IssueService",
+    "NextSuggestionService",
+    "PerceptionJobService",
+    "PerceptionSlotFillingService",
+    "mark_perception_jobs_stale",
 ]

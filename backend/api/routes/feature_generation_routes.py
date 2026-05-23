@@ -7,8 +7,8 @@ from backend.api.schemas.feature_generation_schema import (
     FeatureGenerationDraftDiscardResponse,
     FeatureGenerationDraftResponse,
 )
-from backend.api.services.feature_generation_service import (
-    FeatureGenerationService,
+from backend.api.services.service_registry import (
+    feature_generation_service,
 )
 from backend.database.database import get_session
 
@@ -17,8 +17,6 @@ router = APIRouter(
     prefix="/api/feature_generation_drafts",
     tags=["feature_generation"],
 )
-
-feature_generation_service = FeatureGenerationService()
 
 FEATURE_GENERATION_ERRORS = {
     "project_not_found",

@@ -7,6 +7,9 @@ from backend.core.generators.acceptance_criteria_generator import (
     AcceptanceCriteriaGenerator,
     AcceptanceCriteriaGeneratorInput,
 )
+from backend.api.services.perception_job_invalidation_service import (
+    mark_perception_jobs_stale,
+)
 from backend.schemas import (
     ActorNode,
     FeatureNode,
@@ -72,6 +75,11 @@ class AcceptanceCriteriaGenerationService:
             draft=draft,
             session=session,
         )
+        await mark_perception_jobs_stale(
+            project_id=draft["project_id"],
+            stages={"what"},
+            session=session,
+        )
 
         self._drafts.pop(draft_id, None)
 
@@ -100,10 +108,17 @@ class AcceptanceCriteriaGenerationService:
             session=session,
         )
 
-        return await self._persist_acceptance_criteria_generation_draft(
+        result = await self._persist_acceptance_criteria_generation_draft(
             draft=draft_payload,
             session=session,
         )
+        await mark_perception_jobs_stale(
+            project_id=project_id,
+            stages={"what"},
+            session=session,
+        )
+
+        return result
 
     def _get_draft(
         self,

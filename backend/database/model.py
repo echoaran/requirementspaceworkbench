@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     String,
     Table,
     Text,
@@ -144,6 +145,10 @@ class ProjectModel(TimestampMixin, Base):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    perception_jobs: Mapped[list[PerceptionJobModel]] = relationship(
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
     actors: Mapped[list[ActorModel]] = relationship(
         back_populates="project",
         cascade="all, delete-orphan",
@@ -180,6 +185,50 @@ class PerceptionSlotModel(TimestampMixin, Base):
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
 
     project: Mapped[ProjectModel] = relationship(back_populates="perception_slot")
+
+
+class PerceptionJobModel(TimestampMixin, Base):
+    __tablename__ = "perception_jobs"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "stage",
+            "perception_kind",
+            "target_type",
+            "target_id",
+            "context_hash",
+            name="uq_perception_job_context",
+        ),
+        Index("ix_perception_jobs_project_stage", "project_id", "stage"),
+        Index("ix_perception_jobs_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    stage: Mapped[str] = mapped_column(String(50), nullable=False)
+    perception_kind: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_type: Mapped[str] = mapped_column(
+        String(100),
+        default="project",
+        nullable=False,
+    )
+    target_id: Mapped[str] = mapped_column(
+        String(255),
+        default="",
+        nullable=False,
+    )
+    context_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False)
+    result_slot_payload: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+    error_message: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+    project: Mapped[ProjectModel] = relationship(back_populates="perception_jobs")
 
 
 class ActorModel(TimestampMixin, Base):

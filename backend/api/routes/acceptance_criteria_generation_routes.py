@@ -7,8 +7,8 @@ from backend.api.schemas.acceptance_criteria_generation_schema import (
     AcceptanceCriteriaGenerationDraftDiscardResponse,
     AcceptanceCriteriaGenerationDraftResponse,
 )
-from backend.api.services.acceptance_criteria_generation_service import (
-    AcceptanceCriteriaGenerationService,
+from backend.api.services.service_registry import (
+    acceptance_criteria_generation_service,
 )
 from backend.database.database import get_session
 
@@ -17,8 +17,6 @@ router = APIRouter(
     prefix="/api/acceptance_criteria_generation_drafts",
     tags=["acceptance_criteria_generation"],
 )
-
-acceptance_criteria_generation_service = AcceptanceCriteriaGenerationService()
 
 ACCEPTANCE_CRITERIA_GENERATION_ERRORS = {
     "project_not_found",

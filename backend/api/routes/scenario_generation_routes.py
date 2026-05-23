@@ -9,8 +9,8 @@ from backend.api.schemas.scenario_generation_schema import (
     ScenarioGenerationFullDraftCreateRequest,
     ScenarioGenerationSingleDraftCreateRequest,
 )
-from backend.api.services.scenario_generation_service import (
-    ScenarioGenerationService,
+from backend.api.services.service_registry import (
+    scenario_generation_service,
 )
 from backend.database.database import get_session
 
@@ -20,8 +20,6 @@ router = APIRouter(
     tags=["scenario_generation"],
 )
 
-scenario_generation_service = ScenarioGenerationService()
-
 SCENARIO_GENERATION_ERRORS = {
     "project_not_found",
     "empty_actors",
@@ -30,6 +28,8 @@ SCENARIO_GENERATION_ERRORS = {
     "feature_id_required",
     "feature_not_found",
     "feature_is_not_leaf",
+    "actor_id_required",
+    "actor_not_found",
     "leaf_feature_without_actor",
     "invalid_feature_actor_reference",
     "empty_generation_targets",

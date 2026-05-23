@@ -7,8 +7,8 @@ from backend.api.schemas.flow_generation_schema import (
     FlowGenerationDraftDiscardResponse,
     FlowGenerationDraftResponse,
 )
-from backend.api.services.flow_generation_service import (
-    FlowGenerationService,
+from backend.api.services.service_registry import (
+    flow_generation_service,
 )
 from backend.database.database import get_session
 
@@ -17,8 +17,6 @@ router = APIRouter(
     prefix="/api/flow_generation_drafts",
     tags=["flow_generation"],
 )
-
-flow_generation_service = FlowGenerationService()
 
 FLOW_GENERATION_ERRORS = {
     "project_not_found",

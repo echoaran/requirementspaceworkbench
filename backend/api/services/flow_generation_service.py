@@ -2,6 +2,9 @@ import re
 from uuid import uuid4
 from sqlalchemy import insert, select
 
+from backend.api.services.perception_job_invalidation_service import (
+    mark_perception_jobs_stale,
+)
 from backend.core.generators.flows_generator import (
     FlowsGenerator,
     FlowsGeneratorInput,
@@ -69,6 +72,11 @@ class FlowGenerationService:
 
         result = await self._persist_flow_generation_draft(
             draft=draft,
+            session=session,
+        )
+        await mark_perception_jobs_stale(
+            project_id=draft["project_id"],
+            stages={"how"},
             session=session,
         )
 

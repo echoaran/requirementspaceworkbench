@@ -2,6 +2,9 @@ from uuid import uuid4
 
 from sqlalchemy import select
 
+from backend.api.services.perception_job_invalidation_service import (
+    mark_perception_jobs_stale,
+)
 from backend.core.generators.scopes_generator import (
     ScopesGenerator,
     ScopesGeneratorInput,
@@ -71,6 +74,11 @@ class ScopeGenerationService:
 
         result = await self._persist_scope_generation_draft(
             draft=draft,
+            session=session,
+        )
+        await mark_perception_jobs_stale(
+            project_id=draft["project_id"],
+            stages={"scope"},
             session=session,
         )
 

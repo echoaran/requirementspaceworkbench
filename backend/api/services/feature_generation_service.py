@@ -7,6 +7,9 @@ from backend.core.generators.features_generator import (
     FeaturesGenerator,
     FeaturesGeneratorInput,
 )
+from backend.api.services.perception_job_invalidation_service import (
+    mark_perception_jobs_stale,
+)
 from backend.schemas import ActorNode
 
 
@@ -118,6 +121,11 @@ class FeatureGenerationService:
 
         result = await self._persist_feature_generation_draft(
             draft=draft,
+            session=session,
+        )
+        await mark_perception_jobs_stale(
+            project_id=draft["project_id"],
+            stages={"what", "how", "scope"},
             session=session,
         )
 

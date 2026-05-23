@@ -11,6 +11,9 @@ from backend.core.generators.scenarios_generator import (
     ScenariosGenerator,
     ScenariosGeneratorInput,
 )
+from backend.api.services.perception_job_invalidation_service import (
+    mark_perception_jobs_stale,
+)
 from backend.schemas import ActorNode, FeatureNode
 
 
@@ -33,6 +36,7 @@ class ScenarioGenerationService:
         draft_payload, response_payload = await self._generate_preview(
             project_id=project_id,
             feature_id=None,
+            actor_id=None,
             generation_mode="full",
             session=session,
         )
@@ -55,7 +59,32 @@ class ScenarioGenerationService:
         draft_payload, response_payload = await self._generate_preview(
             project_id=project_id,
             feature_id=feature_id,
+            actor_id=None,
             generation_mode="single",
+            session=session,
+        )
+
+        draft_payload["draft_id"] = draft_id
+        response_payload["draft_id"] = draft_id
+
+        self._drafts[draft_id] = draft_payload
+
+        return response_payload
+
+    async def create_pair_draft(
+        self,
+        project_id: int,
+        feature_id: int,
+        actor_id: int,
+        session,
+    ) -> dict:
+        draft_id = uuid4().hex
+
+        draft_payload, response_payload = await self._generate_preview(
+            project_id=project_id,
+            feature_id=feature_id,
+            actor_id=actor_id,
+            generation_mode="pair",
             session=session,
         )
 
@@ -76,6 +105,7 @@ class ScenarioGenerationService:
         draft_payload, response_payload = await self._generate_preview(
             project_id=draft["project_id"],
             feature_id=draft.get("feature_id"),
+            actor_id=draft.get("actor_id"),
             generation_mode=draft["generation_mode"],
             session=session,
         )
@@ -97,6 +127,11 @@ class ScenarioGenerationService:
 
         result = await self._persist_scenario_generation_draft(
             draft=draft,
+            session=session,
+        )
+        await mark_perception_jobs_stale(
+            project_id=draft["project_id"],
+            stages={"what"},
             session=session,
         )
         scenario_ids = result.pop("scenario_ids")
@@ -145,6 +180,7 @@ class ScenarioGenerationService:
         self,
         project_id: int,
         feature_id: int | None,
+        actor_id: int | None,
         generation_mode: str,
         session,
     ) -> tuple[dict, dict]:
@@ -156,6 +192,7 @@ class ScenarioGenerationService:
         ) = await self._load_generation_context(
             project_id=project_id,
             feature_id=feature_id,
+            actor_id=actor_id,
             generation_mode=generation_mode,
             session=session,
         )
@@ -174,6 +211,7 @@ class ScenarioGenerationService:
             "project_id": project_id,
             "generation_mode": generation_mode,
             "feature_id": feature_id,
+            "actor_id": actor_id,
             "scenarios": generated_scenarios,
         }
 
@@ -181,6 +219,7 @@ class ScenarioGenerationService:
             "project_id": project_id,
             "generation_mode": generation_mode,
             "feature_id": feature_id,
+            "actor_id": actor_id,
             "scenarios": [
                 {
                     "feature_id": item["feature_id"],
@@ -200,6 +239,7 @@ class ScenarioGenerationService:
     async def _load_generation_context(
             project_id: int,
         feature_id: int | None,
+        actor_id: int | None,
         generation_mode: str,
         session,
     ):
@@ -318,7 +358,10 @@ class ScenarioGenerationService:
         if not leaf_feature_nodes:
             raise ValueError("empty_leaf_features")
 
-        if generation_mode == "single":
+        if generation_mode in {
+            "single",
+            "pair",
+        }:
             if feature_id is None:
                 raise ValueError("feature_id_required")
 
@@ -341,16 +384,36 @@ class ScenarioGenerationService:
             if not feature.actorIds:
                 raise ValueError("leaf_feature_without_actor")
 
-            for actor_id in feature.actorIds:
-                if actor_id not in actor_node_map:
+            for current_actor_id in feature.actorIds:
+                if current_actor_id not in actor_node_map:
                     raise ValueError("invalid_feature_actor_reference")
 
                 target_pairs.append(
                     (
                         feature.featureId,
-                        actor_id,
+                        current_actor_id,
                     )
                 )
+
+        if generation_mode == "pair":
+            if actor_id is None:
+                raise ValueError("actor_id_required")
+
+            if actor_id not in actor_node_map:
+                raise ValueError("actor_not_found")
+
+            if (
+                feature_id,
+                actor_id,
+            ) not in target_pairs:
+                raise ValueError("invalid_feature_actor_reference")
+
+            target_pairs = [
+                (
+                    feature_id,
+                    actor_id,
+                )
+            ]
 
         if not target_pairs:
             raise ValueError("empty_generation_targets")

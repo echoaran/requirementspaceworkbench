@@ -53,5 +53,6 @@ htmlcov/
 # 数据库文件
 requirement_space.db
 
-# 备注
+# 备注与实施计划，我自己看的
 note.md
+implementation_plan/

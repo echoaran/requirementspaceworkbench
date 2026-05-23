@@ -7,8 +7,8 @@ from backend.api.schemas.actor_generation_schema import (
     ActorGenerationDraftDiscardResponse,
     ActorGenerationDraftResponse,
 )
-from backend.api.services.actor_generation_service import (
-    ActorGenerationService,
+from backend.api.services.service_registry import (
+    actor_generation_service,
 )
 from backend.database.database import get_session
 
@@ -17,8 +17,6 @@ router = APIRouter(
     prefix="/api/actor_generation_drafts",
     tags=["actor_generation"],
 )
-
-actor_generation_service = ActorGenerationService()
 
 ACTOR_GENERATION_ERRORS = {
     "project_not_found",

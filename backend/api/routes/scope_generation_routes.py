@@ -7,8 +7,8 @@ from backend.api.schemas.scope_generation_schema import (
     ScopeGenerationDraftDiscardResponse,
     ScopeGenerationDraftResponse,
 )
-from backend.api.services.scope_generation_service import (
-    ScopeGenerationService,
+from backend.api.services.service_registry import (
+    scope_generation_service,
 )
 from backend.database.database import get_session
 
@@ -17,8 +17,6 @@ router = APIRouter(
     prefix="/api/scope_generation_drafts",
     tags=["scope_generation"],
 )
-
-scope_generation_service = ScopeGenerationService()
 
 SCOPE_GENERATION_ERRORS = {
     "project_not_found",

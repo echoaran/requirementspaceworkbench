@@ -6,6 +6,9 @@ from backend.core.generators.actors_generator import (
     ActorsGenerator,
     ActorsGeneratorInput,
 )
+from backend.api.services.perception_job_invalidation_service import (
+    mark_perception_jobs_stale,
+)
 
 
 class ActorGenerationService:
@@ -60,6 +63,11 @@ class ActorGenerationService:
 
         result = await self._persist_actor_generation_draft(
             draft=draft,
+            session=session,
+        )
+        await mark_perception_jobs_stale(
+            project_id=draft["project_id"],
+            stages={"what", "how"},
             session=session,
         )
 

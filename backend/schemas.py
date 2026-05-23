@@ -167,6 +167,141 @@ class PerceptionSlot(BaseNode):
     perceptionKind: PerceptionKindType
     perceptionDescription: str
 
+
+class PerceptionJobStatus(str, Enum):
+    NOT_STARTED = "not_started"
+    RUNNING = "running"
+    DONE_EMPTY = "done_empty"
+    DONE_WITH_SLOT = "done_with_slot"
+    FAILED = "failed"
+    STALE = "stale"
+
+
+@node_dataclass
+class PerceptionJob(BaseNode):
+    kind: str = field(default="perception_job", init=False)
+
+    perceptionJobId: int
+    projectId: int
+    stage: str
+    perceptionKind: str
+    targetType: str
+    targetId: Optional[str]
+    contextHash: str
+    status: PerceptionJobStatus
+    resultSlot: Optional[PerceptionSlot] = None
+    errorMessage: Optional[str] = None
+
+
+class IssueSeverity(str, Enum):
+    BLOCKING = "blocking"
+    WARNING = "warning"
+    INFO = "info"
+
+
+class IssueStage(str, Enum):
+    WHAT = "what"
+    HOW = "how"
+    SCOPE = "scope"
+    PREVIEW = "preview"
+
+
+@node_dataclass
+class IssueTarget(BaseNode):
+    kind: str = field(default="issue_target", init=False)
+
+    targetType: str
+    targetId: Optional[int | str] = None
+    parentType: Optional[str] = None
+    parentId: Optional[int | str] = None
+
+    def key(self) -> str:
+        parts = [
+            self.targetType,
+            str(self.targetId) if self.targetId is not None else "none",
+        ]
+
+        if self.parentType is not None:
+            parts.extend(
+                [
+                    self.parentType,
+                    str(self.parentId)
+                    if self.parentId is not None
+                    else "none",
+                ]
+            )
+
+        return ":".join(parts)
+
+
+@node_dataclass
+class Issue(BaseNode):
+    kind: str = field(default="issue", init=False)
+
+    code: str
+    stage: IssueStage
+    severity: IssueSeverity
+    title: str
+    description: str
+    target: Optional[IssueTarget] = None
+    resolverCode: Optional[str] = None
+    metadata: dict = field(default_factory=dict)
+
+    @property
+    def issueId(self) -> str:
+        target_key = self.target.key() if self.target is not None else "project"
+        return f"{self.stage.value}:{self.code}:{target_key}"
+
+
+@node_dataclass
+class IssueResolution(BaseNode):
+    kind: str = field(default="issue_resolution", init=False)
+
+    issueCode: str
+    resolutionType: str
+    title: str
+    description: str
+    action: dict
+    draftId: Optional[str] = None
+    draft: dict = field(default_factory=dict)
+    patch: Optional[dict] = None
+
+    def to_dict(self) -> dict:
+        return {
+            "issue_code": self.issueCode,
+            "resolution_type": self.resolutionType,
+            "title": self.title,
+            "description": self.description,
+            "action": self.action,
+            "draft_id": self.draftId,
+            "draft": self.draft,
+            "patch": self.patch,
+        }
+
+
+@node_dataclass
+class NextSuggestion(BaseNode):
+    kind: str = field(default="next_suggestion", init=False)
+
+    sourceType: str
+    code: str
+    title: str
+    description: str
+    status: str = "ready"
+    target: Optional[dict] = None
+    action: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return {
+            "source_type": self.sourceType,
+            "code": self.code,
+            "title": self.title,
+            "description": self.description,
+            "status": self.status,
+            "target": self.target,
+            "action": self.action,
+        }
+
 # 原型预览
 @node_dataclass
 class PreviewUI(BaseNode):

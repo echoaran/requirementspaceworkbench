@@ -25,6 +25,15 @@ from backend.api.routes.acceptance_criteria_generation_routes import (
 from backend.api.routes.scope_generation_routes import (
     router as scope_generation_router,
 )
+from backend.api.routes.issue_routes import (
+    router as issue_router,
+)
+from backend.api.routes.next_suggestion_routes import (
+    router as next_suggestion_router,
+)
+from backend.api.routes.perception_slot_filling_routes import (
+    router as perception_slot_filling_router,
+)
 
 from backend.database.database import init_db
 
@@ -50,3 +59,6 @@ app.include_router(flow_generation_router)
 app.include_router(scenario_generation_router)
 app.include_router(acceptance_criteria_generation_router)
 app.include_router(scope_generation_router)
+app.include_router(issue_router)
+app.include_router(next_suggestion_router)
+app.include_router(perception_slot_filling_router)
